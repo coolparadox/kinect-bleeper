@@ -1,4 +1,0 @@
-kinect-bleeper
-==============
-
-Obstacle avoidance using sounds and openkinect
