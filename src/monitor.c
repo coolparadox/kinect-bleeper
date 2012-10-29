@@ -12,9 +12,9 @@
 
 #include "monitor.h"
 
-void *monitor_thread(void *monitor_data) {
+void *monitor_thread(void *thread_data) {
 
-#define data ((struct monitor_data *) monitor_data)
+#define data ((struct monitor_data *) thread_data)
 
 	GtkWidget *window;
 

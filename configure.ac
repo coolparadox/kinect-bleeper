@@ -4,7 +4,7 @@
 AC_PREREQ([2.68])
 AC_INIT([kinect-bleeper], [0.0], [http://github.com/coolparadox/kinect-bleeper/issues], [], [http://coolparadox.github.com/kinect-bleeper])
 AM_INIT_AUTOMAKE([gnu])
-AC_CONFIG_SRCDIR([src/kinect_bleeper.c])
+AC_CONFIG_SRCDIR([src/bleeper.c])
 AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.

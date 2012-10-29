@@ -1,9 +1,9 @@
 bin_PROGRAMS = kinect_bleeper
 
 if GTK
-kinect_bleeper_SOURCES = kinect_bleeper.c monitor.h monitor.c
+kinect_bleeper_SOURCES = bleeper.c monitor.h monitor.c
 else
-kinect_bleeper_SOURCES = kinect_bleeper.c
+kinect_bleeper_SOURCES = bleeper.c
 endif
 
 kinect_bleeper_CFLAGS = @GTK_CFLAGS@

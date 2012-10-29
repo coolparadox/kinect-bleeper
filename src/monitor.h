@@ -1,5 +1,5 @@
 /*
- * include file for kinect_bleeper GUI monitor
+ * kinect_bleeper GUI monitor
  *
  * Copyright (c) 2012 coolparadox.com
  *
@@ -20,5 +20,5 @@ struct monitor_data {
 
 };
 
-void *monitor_thread(void *monitor_data);
+void *monitor_thread(void *thread_data);
 
