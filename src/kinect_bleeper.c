@@ -19,6 +19,10 @@
 
 #include <libfreenect/libfreenect.h>
 
+#ifdef GTK
+#include <gtk/gtk.h>
+#endif
+
 volatile sig_atomic_t running = 1;
 
 /*
@@ -28,8 +32,8 @@ volatile sig_atomic_t running = 1;
 const char *argp_program_version = PACKAGE_VERSION;
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 
-static char doc[] = "kinect_bleeper -- obstacle avoidance using sounds and openkinect\v"
-	"This routine in not yet implemented.\n";
+static char doc[] = "kinect_bleeper -- obstacle avoidance using sounds and "
+			"openkinect\vThis routine in not yet implemented.\n";
 
 static char args_doc[] = "";
 
@@ -101,7 +105,8 @@ int main (int argc, char **argv) {
 		fprintf(stderr, "error: cannot open kinect device.\n");
 		return (1);
 	}
-	if (freenect_set_depth_mode(dev, freenect_find_depth_mode(FREENECT_RESOLUTION_MEDIUM, FREENECT_DEPTH_11BIT))) {
+	if (freenect_set_depth_mode(dev, freenect_find_depth_mode(
+			FREENECT_RESOLUTION_MEDIUM, FREENECT_DEPTH_11BIT))) {
 		fprintf(stderr, "error: cannot set depth mode.\n");
 		goto shutdown;
 	}

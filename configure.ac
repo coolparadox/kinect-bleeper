@@ -9,9 +9,12 @@ AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
 AC_PROG_CC
+AM_PROG_CC_C_O
+AC_CHECK_PROG([has_pkg_config], [pkg-config], [yes], [no])
 
 # Checks for libraries.
 AC_CHECK_LIB([freenect], [freenect_init], [], [AC_MSG_ERROR([this tool requires libfreenect.])])
+AC_CHECK_LIB([gtk-3], [gtk_widget_new], [has_gtk=yes], [has_gtk=no])
 
 # Checks for header files.
 AC_HEADER_STDC
@@ -38,6 +41,34 @@ AM_CONDITIONAL(DEBUG, test "x$debug" = xyes)
 AH_TEMPLATE([DEBUG], [Define to enable debug code.])
 test "x$debug" = xyes && AC_DEFINE([DEBUG], [])
 AC_MSG_RESULT([debug code enablement... $debug])
+
+# Add configure option for enabling a gui monitor.
+AC_ARG_ENABLE(
+	gtk,
+	[AS_HELP_STRING(
+		[--enable-gtk], 
+		[enable a gui monitor using gtk-3])],
+	[case "$enableval" in
+		yes)
+			test x$has_gtk = xyes || AC_MSG_ERROR([cannot honor --enable-gtk due to missing libgtk-3.])
+			gtk=$enableval
+			;;
+		no) gtk=$enableval ;;
+		*) AC_MSG_ERROR(bad value "$enableval" for --enable-gtk) ;;
+	esac],
+	[gtk=$has_gtk])
+AM_CONDITIONAL(GTK, test "x$gtk" = xyes)
+AH_TEMPLATE([GTK], [Define to enable gtk code.])
+test "x$gtk" = xyes && AC_DEFINE([GTK], [])
+AC_MSG_RESULT([build gtk-3 gui monitor... $gtk])
+
+if test x$gtk = xyes ; then
+	test x$has_pkg_config = xyes || AC_MSG_ERROR([cannot get gtk+-3.0 cflags due to missing pkg-config.])
+	gtk_cflags=$( pkg-config --cflags gtk+-3.0 )
+	AC_SUBST([GTK_CFLAGS], [$gtk_cflags])
+else
+	AC_SUBST([GTK_CFLAGS], [""])
+fi
 
 # Process pattern replacements.
 AC_CONFIG_FILES([Makefile
