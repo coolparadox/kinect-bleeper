@@ -21,7 +21,8 @@
 
 #ifdef GTK
 #include <gtk/gtk.h>
-#endif
+#include "monitor.h"
+#endif // GTK
 
 volatile sig_atomic_t running = 1;
 
@@ -115,6 +116,15 @@ int main (int argc, char **argv) {
 		fprintf(stderr, "error: cannot start depth stream.\n");
 		goto shutdown;
 	}
+
+#ifdef GTK
+	/* Start the GUI monitor. */
+	struct monitor_data monitor_data;
+	monitor_data.argc = &argc;
+	monitor_data.argv = &argv;
+	monitor_data.running = &running;
+	g_thread_new("monitor", monitor_thread, &monitor_data);
+#endif // GTK
 
 	/* Process frame events. */
 	while (running && freenect_process_events(ctx) >= 0);

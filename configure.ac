@@ -65,9 +65,12 @@ AC_MSG_RESULT([build gtk-3 gui monitor... $gtk])
 if test x$gtk = xyes ; then
 	test x$has_pkg_config = xyes || AC_MSG_ERROR([cannot get gtk+-3.0 cflags due to missing pkg-config.])
 	gtk_cflags=$( pkg-config --cflags gtk+-3.0 )
+	gtk_libs=$( pkg-config --libs gtk+-3.0 )
 	AC_SUBST([GTK_CFLAGS], [$gtk_cflags])
+	AC_SUBST([GTK_LDFLAGS], [$gtk_libs])
 else
 	AC_SUBST([GTK_CFLAGS], [""])
+	AC_SUBST([GTK_LDFLAGS], [""])
 fi
 
 # Process pattern replacements.
