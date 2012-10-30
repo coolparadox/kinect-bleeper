@@ -123,11 +123,17 @@ int main (int argc, char **argv) {
 	}
 
 #ifdef GTK
+
 	/* Start the GUI monitor. */
 	struct monitor_data monitor_data;
 	g_mutex_init(&monitor_data.lock);
 	monitor_data.running = &running;
+	monitor_data.freenect_frame_width = 640;
+	monitor_data.freenect_frame_height = 488;
+	monitor_data.freenect_bits_per_pixel = sizeof(uint16_t);
+	monitor_data.freenect_bits_per_depth = 11;
 	g_thread_new("monitor", monitor_thread, &monitor_data);
+
 #endif // GTK
 
 	/* Process frame events. */
