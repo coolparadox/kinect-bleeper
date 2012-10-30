@@ -14,8 +14,7 @@
 
 struct monitor_data {
 
-	int *argc;
-	char ***argv;
+	GMutex lock;
 	sig_atomic_t *running;
 
 };

@@ -89,6 +89,11 @@ int main (int argc, char **argv) {
 	freenect_context *ctx;
 	freenect_device *dev;
 
+#ifdef GTK
+	/* Initialize gtk library. */
+	gtk_init (&argc, &argv);
+#endif // GTK
+
 	/* Get CLI arguments. */
         memset (&arguments, 0, sizeof (struct arguments));
         argp_parse (&argp, argc, argv, 0, 0, &arguments);
@@ -120,8 +125,7 @@ int main (int argc, char **argv) {
 #ifdef GTK
 	/* Start the GUI monitor. */
 	struct monitor_data monitor_data;
-	monitor_data.argc = &argc;
-	monitor_data.argv = &argv;
+	g_mutex_init(&monitor_data.lock);
 	monitor_data.running = &running;
 	g_thread_new("monitor", monitor_thread, &monitor_data);
 #endif // GTK

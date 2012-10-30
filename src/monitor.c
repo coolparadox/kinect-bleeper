@@ -18,12 +18,16 @@ void *monitor_thread(void *thread_data) {
 
 	GtkWidget *window;
 
-	gtk_init (data->argc, data->argv);
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+
 	gtk_widget_show(window);
 	gtk_main();
-	*(data->running) = 0;
+
+	g_mutex_lock(&data->lock);
+	*data->running = 0;
+	g_mutex_unlock(&data->lock);
+
 	return 0;
 
 #undef data
