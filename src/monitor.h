@@ -10,16 +10,18 @@
  *
  */
 
+#include <stdint.h>
 #include <gtk/gtk.h>
 
 struct monitor_data {
 
 	GMutex lock;
-	sig_atomic_t *running;
+	volatile sig_atomic_t *running;
 	int freenect_frame_width;
 	int freenect_frame_height;
-	int freenect_bits_per_pixel;
 	int freenect_bits_per_depth;
+	uint16_t *freenect_depth;
+	GtkWidget *depth_widget;
 
 };
 

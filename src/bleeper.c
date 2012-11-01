@@ -19,9 +19,19 @@
 
 #include <libfreenect/libfreenect.h>
 
+#define DEPTH_FRAME_WIDTH 640
+#define DEPTH_FRAME_HEIGHT 480
+#define DEPTH_BITS_PER_DEPTH 11
+
+#define DEPTH_FRAME_SIZE sizeof(uint16_t) * DEPTH_FRAME_WIDTH * DEPTH_FRAME_HEIGHT
+
 #ifdef GTK
+
 #include <gtk/gtk.h>
 #include "monitor.h"
+
+struct monitor_data monitor_data;
+
 #endif // GTK
 
 volatile sig_atomic_t running = 1;
@@ -125,13 +135,14 @@ int main (int argc, char **argv) {
 #ifdef GTK
 
 	/* Start the GUI monitor. */
-	struct monitor_data monitor_data;
 	g_mutex_init(&monitor_data.lock);
 	monitor_data.running = &running;
-	monitor_data.freenect_frame_width = 640;
-	monitor_data.freenect_frame_height = 488;
-	monitor_data.freenect_bits_per_pixel = sizeof(uint16_t);
-	monitor_data.freenect_bits_per_depth = 11;
+	monitor_data.freenect_frame_width = DEPTH_FRAME_WIDTH;
+	monitor_data.freenect_frame_height = DEPTH_FRAME_HEIGHT;
+	monitor_data.freenect_bits_per_depth = DEPTH_BITS_PER_DEPTH;
+	monitor_data.freenect_depth = malloc(DEPTH_FRAME_SIZE);
+	memset(monitor_data.freenect_depth, 0, DEPTH_FRAME_SIZE);
+	monitor_data.depth_widget = NULL;
 	g_thread_new("monitor", monitor_thread, &monitor_data);
 
 #endif // GTK
@@ -155,6 +166,18 @@ shutdown:
 }
 
 void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
+
+#ifdef GTK
+
+	/* Notify GUI monitor about depth information update. */
+	if (g_mutex_trylock(&monitor_data.lock)) {
+		memcpy(monitor_data.freenect_depth, depth, DEPTH_FRAME_SIZE);
+		g_mutex_unlock(&monitor_data.lock);
+		if (monitor_data.depth_widget)
+			gtk_widget_queue_draw(monitor_data.depth_widget);
+	}
+
+#endif // GTK
 
 	/* FIXME: implement depth stream processing here. */
 	printf ("%u\n", timestamp);
