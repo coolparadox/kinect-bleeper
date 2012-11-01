@@ -14,59 +14,70 @@
 
 #include "monitor.h"
 
-void *monitor_thread(void *thread_data) {
+void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data);
 
-#define data ((struct monitor_data *) thread_data)
-#define get_lock(data) g_mutex_lock(&data->lock)
-#define release_lock(data) g_mutex_unlock(&data->lock)
+#define data ((struct monitor_data *) monitor_data)
+#define lock(data) g_mutex_lock(&data->lock)
+#define unlock(data) g_mutex_unlock(&data->lock)
+
+void *monitor_thread(void *monitor_data) {
 
 	/* Initialize monitor window. */
-	get_lock(data);
-	GtkWidget *window;
-	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-	int stride;
-	stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24,
-						data->freenect_frame_width);
-	unsigned char *surface_buffer;
-	surface_buffer = malloc(stride * data->freenect_frame_height);
-	cairo_surface_t *depth_surface;
-	depth_surface = cairo_image_surface_create_for_data(surface_buffer,
-						CAIRO_FORMAT_RGB24,
-						data->freenect_frame_width,
-						data->freenect_frame_height,
-						stride);
-	size_t i;
-	for (i = 0; i < stride * data->freenect_frame_height ; ) {
-		surface_buffer[i++] = 0x00; // blue
-		surface_buffer[i++] = 0x00; // green
-		surface_buffer[i++] = 0x00; // red
-		surface_buffer[i++] = 0x00; // unused
-	}
-	GdkPixbuf *depth_pixbuf;
-	depth_pixbuf = gdk_pixbuf_get_from_surface(depth_surface, 0, 0,
-						data->freenect_frame_width,
+	GtkWidget *depth_widget = gtk_drawing_area_new();
+	gtk_widget_set_size_request(depth_widget, data->freenect_frame_width,
 						data->freenect_frame_height);
-	GtkWidget *depth_image;
-	depth_image = gtk_image_new_from_pixbuf(depth_pixbuf);
-	gtk_container_add(GTK_CONTAINER(window), depth_image);
-	gtk_widget_show(GTK_WIDGET(depth_image));
+	gtk_container_add(GTK_CONTAINER(window), depth_widget);
+	g_signal_connect(G_OBJECT(depth_widget), "draw",
+				G_CALLBACK(depth_draw), monitor_data);
+	gtk_widget_show(depth_widget);
 	gtk_widget_show(window);
-	release_lock(data);
 
 	/* Await for events. */
 	gtk_main();
 
-	/* Signal for main thread termination. */
-	get_lock(data);
+	/* Signal main thread for termination. */
+	lock(data);
 	*data->running = 0;
-	release_lock(data);
+	unlock(data);
 
 	return 0;
 
-#undef release_lock
-#undef get_lock
-#undef data
+}
+
+void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
+
+	size_t i;
+
+	cairo_surface_t *current_surface = cairo_get_target(cr);
+	unsigned char *current_buffer = cairo_image_surface_get_data(current_surface);
+	int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24,
+						data->freenect_frame_width);
+	unsigned char *new_buffer = malloc(stride * data->freenect_frame_height);
+	for (i = 0; i < stride * data->freenect_frame_height ; ) {
+		new_buffer[i++] = 0x00; // blue
+		new_buffer[i++] = 0xFF; // green
+		new_buffer[i++] = 0x00; // red
+		new_buffer[i++] = 0x00; // unused
+	}
+	cairo_surface_t *new_surface = cairo_image_surface_create_for_data(
+						new_buffer, CAIRO_FORMAT_RGB24,
+						data->freenect_frame_width,
+						data->freenect_frame_height,
+						stride);
+	cairo_set_source_surface(cr, new_surface, 0, 0);
+	if (!current_surface) {
+		cairo_surface_finish(current_surface);
+		free(current_buffer);
+	}
+	cairo_paint(cr);
+	return;
 
 }
+
+
+#undef unlock
+#undef lock
+#undef data
 
