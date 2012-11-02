@@ -20,7 +20,7 @@ struct monitor_data {
 	int freenect_frame_width;
 	int freenect_frame_height;
 	int freenect_bits_per_depth;
-	uint16_t *freenect_depth;
+	double *depth;
 	GtkWidget *depth_widget;
 
 };

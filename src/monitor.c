@@ -11,6 +11,7 @@
  */
 
 #include <stdlib.h>
+#include <math.h>
 
 #include "monitor.h"
 
@@ -49,33 +50,44 @@ void *monitor_thread(void *monitor_data) {
 
 }
 
+#define MAX_DEPTH 3
+
 void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 
 	size_t i, j, k;
 
-	/* Acquire current image resources to be replaced. */
+	/* Remember current image resources to be replaced. */
 	cairo_surface_t *current_surface = cairo_get_target(cr);
 	unsigned char *current_buffer = cairo_image_surface_get_data(current_surface);
 
-	/* Build a new surface representing the depth information. */
+	/* Build a new Cairo surface representing the depth information. */
+	lock(data);
 	int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24,
 						data->freenect_frame_width);
 	unsigned char *new_buffer = malloc(stride * data->freenect_frame_height);
-	for (i = 0; i < data->freenect_frame_height ; i++ ) {
+	for (j = 0; j < data->freenect_frame_height ; j++ ) {
 
-		k = i * stride; // surface buffer column index;
-		for (j = 0; j < data->freenect_frame_width ; j++ ) {
+		k = j * stride; // surface buffer column index;
+		for (i = 0; i < data->freenect_frame_width ; i++ ) {
 
-			/* Convert 11-bit depth value to 8-bit gray level. */
-			uint16_t depth = data->freenect_depth[
-					i * data->freenect_frame_width + j];
-			uint16_t gray_level = (depth >> (data->freenect_bits_per_depth - 8)) & 0xFF;
-			gray_level = (uint16_t) 0xFF - gray_level;
+			/* Convert depth value to 8-bit gray level. */
+			double depth = data->depth[j * data->freenect_frame_width + i];
+			if (depth < 0) depth = 0;
+			if (depth > MAX_DEPTH) {
+				depth = MAX_DEPTH;
+			}
+			long int gray_level = lrint(depth * (double) 0xFF / MAX_DEPTH);
+			if (gray_level > 0xFF) {
+				fprintf(stderr, "alert: pixel value overflow\n");
+				gray_level = 0xFF;
+			}
+			uint8_t pixel_value = 0xFF - (uint8_t) gray_level;
+			if (pixel_value >= 0xFF) pixel_value = 0;
 
 			/* Fill buffer for this RGB pixel. */
-			new_buffer[k++] = (uint8_t) gray_level; // blue component
-			new_buffer[k++] = (uint8_t) gray_level; // green component
-			new_buffer[k++] = (uint8_t) gray_level; // red component
+			new_buffer[k++] = pixel_value; // blue component
+			new_buffer[k++] = pixel_value; // green component
+			new_buffer[k++] = pixel_value; // red component
 			new_buffer[k++] = (uint8_t) 0; //unused
 
 		}
@@ -85,8 +97,9 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 						data->freenect_frame_width,
 						data->freenect_frame_height,
 						stride);
+	unlock(data);
 
-	/* Replace the widget's Cairo surface, and release now unused buffers. */
+	/* Replace the widget's Cairo surface, and release old buffers. */
 	cairo_set_source_surface(cr, new_surface, 0, 0);
 	if (!current_surface) {
 		cairo_surface_finish(current_surface);

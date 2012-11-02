@@ -16,14 +16,16 @@
 #include <string.h>
 #include <argp.h>
 #include <signal.h>
+#include <math.h>
 
 #include <libfreenect/libfreenect.h>
 
-#define DEPTH_FRAME_WIDTH 640
-#define DEPTH_FRAME_HEIGHT 480
-#define DEPTH_BITS_PER_DEPTH 11
+#define KINETIC_DEPTH_FRAME_WIDTH 640
+#define KINETIC_DEPTH_FRAME_HEIGHT 480
+#define KINETIC_DEPTH_BITS_PER_DEPTH 11
 
-#define DEPTH_FRAME_SIZE sizeof(uint16_t) * DEPTH_FRAME_WIDTH * DEPTH_FRAME_HEIGHT
+#define KINETIC_DEPTH_FRAME_SIZE (sizeof(uint16_t) * KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT)
+#define DEPTH_MATRIX_SIZE (sizeof(double) * KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT)
 
 #ifdef GTK
 
@@ -137,11 +139,11 @@ int main (int argc, char **argv) {
 	/* Start the GUI monitor. */
 	g_mutex_init(&monitor_data.lock);
 	monitor_data.running = &running;
-	monitor_data.freenect_frame_width = DEPTH_FRAME_WIDTH;
-	monitor_data.freenect_frame_height = DEPTH_FRAME_HEIGHT;
-	monitor_data.freenect_bits_per_depth = DEPTH_BITS_PER_DEPTH;
-	monitor_data.freenect_depth = malloc(DEPTH_FRAME_SIZE);
-	memset(monitor_data.freenect_depth, 0, DEPTH_FRAME_SIZE);
+	monitor_data.freenect_frame_width = KINETIC_DEPTH_FRAME_WIDTH;
+	monitor_data.freenect_frame_height = KINETIC_DEPTH_FRAME_HEIGHT;
+	monitor_data.freenect_bits_per_depth = KINETIC_DEPTH_BITS_PER_DEPTH;
+	monitor_data.depth = malloc(DEPTH_MATRIX_SIZE);
+	memset(monitor_data.depth, 0, DEPTH_MATRIX_SIZE);
 	monitor_data.depth_widget = NULL;
 	g_thread_new("monitor", monitor_thread, &monitor_data);
 
@@ -167,11 +169,45 @@ shutdown:
 
 void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
+	size_t i, j;
+
+	/* Convert raw disparity and 2D offset values to real world distance information.
+	See http://openkinect.org/wiki/Imaging_Information#Depth_Camera */
+
+#define WIDTH KINETIC_DEPTH_FRAME_WIDTH
+#define HEIGHT KINETIC_DEPTH_FRAME_HEIGHT
+
+	static double x[WIDTH][HEIGHT];
+	static double y[WIDTH][HEIGHT];
+	static double z[WIDTH][HEIGHT];
+
+	for (i = 0; i < WIDTH; i++)
+		for (j = 0; j < HEIGHT; j++) {
+
+#define minDistance -10
+#define scaleFactor 0.0021
+#define disparity(i, j) ((uint16_t *) depth)[i * HEIGHT + j]
+
+			z[i][j] = tan(disparity(i, j) / 2842.5 + 1.1863)
+							* 0.1236 - 0.037;
+			x[i][j] = ((double) i - WIDTH / 2) * (z[i][j] + minDistance)
+						* scaleFactor * (WIDTH / HEIGHT);
+			y[i][j] = ((double) j - HEIGHT / 2) * (z[i][j] + minDistance)
+								* scaleFactor;
+
+#undef disparity
+#undef scaleFactor
+#undef minDistance
+#undef HEIGHT
+#undef WIDTH
+
+		}
+
 #ifdef GTK
 
 	/* Notify GUI monitor about depth information update. */
 	if (g_mutex_trylock(&monitor_data.lock)) {
-		memcpy(monitor_data.freenect_depth, depth, DEPTH_FRAME_SIZE);
+		memcpy(monitor_data.depth, z, DEPTH_MATRIX_SIZE);
 		g_mutex_unlock(&monitor_data.lock);
 		if (monitor_data.depth_widget)
 			gtk_widget_queue_draw(monitor_data.depth_widget);
@@ -179,7 +215,6 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 #endif // GTK
 
-	/* FIXME: implement depth stream processing here. */
 	printf ("%u\n", timestamp);
 
 }
