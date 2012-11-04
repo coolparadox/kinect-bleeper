@@ -253,15 +253,17 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 #define minDistance -10
 #define scaleFactor 0.0021
-#define disparity(i, j) ((uint16_t *) depth)[i * HEIGHT + j]
+#define disparity(i,j) ((uint16_t *) depth)[i * HEIGHT + j]
 
 			z[i][j] = tan(disparity(i, j) / 2842.5 + 1.1863)
 							* 0.1236 - 0.037;
-			//x[i][j] = ((double) i - WIDTH / 2) *
-			//				(z[i][j] + minDistance)
-					//* scaleFactor * (WIDTH / HEIGHT);
-			//y[i][j] = ((double) j - HEIGHT / 2) *
-			//		(z[i][j] + minDistance) * scaleFactor;
+			/*
+			x[i][j] = ((double) i - WIDTH / 2) *
+							(z[i][j] + minDistance)
+					* scaleFactor * (WIDTH / HEIGHT);
+			y[i][j] = ((double) j - HEIGHT / 2) *
+					(z[i][j] + minDistance) * scaleFactor;
+			*/
 			if (z[i][j] > max_depth) z[i][j] = max_depth;
 			if (z[i][j] < MIN_DEPTH) {
 				//fprintf(stderr, "MIN_DEPT trap\n");
