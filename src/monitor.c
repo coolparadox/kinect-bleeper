@@ -50,7 +50,7 @@ void *monitor_thread(void *monitor_data) {
 
 }
 
-#define MAX_DEPTH 3
+#define MAX_DEPTH 4
 
 void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 

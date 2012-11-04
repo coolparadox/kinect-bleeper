@@ -7,7 +7,7 @@ kinect_bleeper_SOURCES = bleeper.c
 endif
 
 kinect_bleeper_CFLAGS = @GTK_CFLAGS@
-kinect_bleeper_LDFLAGS = @GTK_LDFLAGS@
+kinect_bleeper_LDFLAGS = -lm @GTK_LDFLAGS@
 
 MAINTAINERCLEANFILES = Makefile.in
 

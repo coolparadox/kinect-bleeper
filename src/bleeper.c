@@ -51,14 +51,14 @@ static char doc[] = "kinect_bleeper -- obstacle avoidance using sounds and "
 static char args_doc[] = "";
 
 static struct argp_option options[] = {
-
+	{ "fps", 'f', 0, 0, "Show average frames per second acquired from device." },
         { 0 }
 
 };
 
 struct arguments {
 
-	char *dummy;
+	int fps;
 
 };
 
@@ -66,6 +66,9 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
 
         struct arguments *arguments = state->input;
         switch (key) {
+		case 'f':
+			arguments->fps = 1;
+			break;
 		case ARGP_KEY_ARG:
 			switch (state->arg_num) {
 				default:
@@ -85,7 +88,6 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp);
 void signal_cleanup(int num) {
 
 	running = 0;
-	fprintf(stderr, "\ncleaning up...\n");
 	signal(SIGINT, signal_cleanup);
 
 }
@@ -93,6 +95,8 @@ void signal_cleanup(int num) {
 /*
  * The portal.
  */
+
+int fps;
 
 int main (int argc, char **argv) {
 
@@ -107,8 +111,9 @@ int main (int argc, char **argv) {
 #endif // GTK
 
 	/* Get CLI arguments. */
-        memset (&arguments, 0, sizeof (struct arguments));
+	arguments.fps = 0;
         argp_parse (&argp, argc, argv, 0, 0, &arguments);
+	fps = arguments.fps;
 
 	/* Cleanup on interruption. */
 	signal(SIGINT, signal_cleanup);
@@ -123,6 +128,7 @@ int main (int argc, char **argv) {
 		fprintf(stderr, "error: cannot open kinect device.\n");
 		return (1);
 	}
+	fprintf(stderr, "kinetic device found.\n");
 	if (freenect_set_depth_mode(dev, freenect_find_depth_mode(
 			FREENECT_RESOLUTION_MEDIUM, FREENECT_DEPTH_11BIT))) {
 		fprintf(stderr, "error: cannot set depth mode.\n");
@@ -133,6 +139,7 @@ int main (int argc, char **argv) {
 		fprintf(stderr, "error: cannot start depth stream.\n");
 		goto shutdown;
 	}
+	fprintf(stderr, "depth stream initialized.\n");
 
 #ifdef GTK
 
@@ -146,11 +153,14 @@ int main (int argc, char **argv) {
 	memset(monitor_data.depth, 0, DEPTH_MATRIX_SIZE);
 	monitor_data.depth_widget = NULL;
 	g_thread_new("monitor", monitor_thread, &monitor_data);
+	fprintf(stderr, "gui monitor started.\n");
 
 #endif // GTK
 
 	/* Process frame events. */
+	fprintf(stderr, "processing stream...\n");
 	while (running && freenect_process_events(ctx) >= 0);
+	fprintf(stderr, "shutting down...\n");
 
 shutdown:
 
@@ -177,8 +187,8 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 #define WIDTH KINETIC_DEPTH_FRAME_WIDTH
 #define HEIGHT KINETIC_DEPTH_FRAME_HEIGHT
 
-	static double x[WIDTH][HEIGHT];
-	static double y[WIDTH][HEIGHT];
+	//static double x[WIDTH][HEIGHT];
+	//static double y[WIDTH][HEIGHT];
 	static double z[WIDTH][HEIGHT];
 
 	for (i = 0; i < WIDTH; i++)
@@ -190,10 +200,10 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 			z[i][j] = tan(disparity(i, j) / 2842.5 + 1.1863)
 							* 0.1236 - 0.037;
-			x[i][j] = ((double) i - WIDTH / 2) * (z[i][j] + minDistance)
-						* scaleFactor * (WIDTH / HEIGHT);
-			y[i][j] = ((double) j - HEIGHT / 2) * (z[i][j] + minDistance)
-								* scaleFactor;
+			//x[i][j] = ((double) i - WIDTH / 2) * (z[i][j] + minDistance)
+						//* scaleFactor * (WIDTH / HEIGHT);
+			//y[i][j] = ((double) j - HEIGHT / 2) * (z[i][j] + minDistance)
+								//* scaleFactor;
 
 #undef disparity
 #undef scaleFactor
@@ -215,7 +225,24 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 #endif // GTK
 
-	printf ("%u\n", timestamp);
+	if (fps) {
+
+		/* Account and show the average frames per seconds. */
+		static size_t frame_count = 0;
+		static unsigned int fps_same_second = 0;
+		frame_count++;
+		if (!(time(NULL) % 10)) {
+			if (!fps_same_second) {
+				fprintf(stderr, "FPS = %.1f\n",
+						(double) frame_count / 10);
+				frame_count = 0;
+			}
+			fps_same_second = 1;
+		}
+		else
+			fps_same_second = 0;
+
+	}
 
 }
 
