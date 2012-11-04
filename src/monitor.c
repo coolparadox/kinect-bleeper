@@ -68,7 +68,7 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 	lock(data);
 	for (j = 0; j < data->freenect_frame_height ; j++ ) {
 
-		k = j * stride; // surface buffer column index;
+		k = j * (stride >> 2); // surface buffer pixel column index;
 		for (i = 0; i < data->freenect_frame_width ; i++ ) {
 
 			/* Convert depth value to 8-bit gray level. */
@@ -93,14 +93,15 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 				fprintf(stderr, "alert: pixel value overflow\n");
 				gray_level = 0xFF;
 			}
-			uint8_t pixel_value = (uint8_t) 0xFF - gray_level;
-			if (pixel_value >= 0xFF) pixel_value = 0;
 
-			/* Fill buffer for this RGB pixel. */
-			surface_buffer[k++] = pixel_value; // blue component
-			surface_buffer[k++] = pixel_value; // green component
-			surface_buffer[k++] = pixel_value; // red component
-			surface_buffer[k++] = (uint8_t) 0; //unused
+			/* Represent the 8-bit gray level in a 32-bit RGB pixel
+			 * where the brighter, the closer. */
+			uint8_t gray_value = (uint8_t) 0xFF - gray_level;
+			if (gray_value >= 0xFF) gray_value = 0;
+			((uint32_t *) surface_buffer)[k++] =
+						((uint32_t) gray_value << 8 |
+						(uint32_t) gray_value) << 8 |
+						(uint32_t) gray_value;
 
 		}
 	}
@@ -109,12 +110,12 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 						data->freenect_frame_width,
 						data->freenect_frame_height,
 						stride);
-	unlock(data);
 
 	/* Paint the new surface data in the wodget. */
 	cairo_set_source_surface(cr, new_surface, 0, 0);
 	cairo_paint(cr);
 
+	unlock(data);
 	return;
 
 }

@@ -187,7 +187,9 @@ int main (int argc, char **argv) {
 		fprintf(stderr, "error: cannot start depth stream.\n");
 		goto shutdown;
 	}
-	fprintf(stderr, "depth stream initialized.\n");
+	fprintf(stderr, "depth stream initialized, ");
+	fprintf(stderr, "dynamic range: %.2lf - %.2lf meters\n", MIN_DEPTH,
+								max_depth);
 
 #ifdef GTK
 
@@ -238,14 +240,12 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 	size_t i, j;
 
-	/* Convert raw disparity and 2D offset values to real world distance information.
+	/* Convert raw disparity values to real world distance information.
 	See http://openkinect.org/wiki/Imaging_Information#Depth_Camera */
 
 #define WIDTH KINETIC_DEPTH_FRAME_WIDTH
 #define HEIGHT KINETIC_DEPTH_FRAME_HEIGHT
 
-	//static double x[WIDTH][HEIGHT];
-	//static double y[WIDTH][HEIGHT];
 	static double z[WIDTH][HEIGHT];
 
 	for (i = 0; i < WIDTH; i++)
@@ -257,18 +257,8 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 			z[i][j] = tan(disparity(i, j) / 2842.5 + 1.1863)
 							* 0.1236 - 0.037;
-			/*
-			x[i][j] = ((double) i - WIDTH / 2) *
-							(z[i][j] + minDistance)
-					* scaleFactor * (WIDTH / HEIGHT);
-			y[i][j] = ((double) j - HEIGHT / 2) *
-					(z[i][j] + minDistance) * scaleFactor;
-			*/
 			if (z[i][j] > max_depth) z[i][j] = max_depth;
-			if (z[i][j] < MIN_DEPTH) {
-				//fprintf(stderr, "MIN_DEPT trap\n");
-				z[i][j] = MIN_DEPTH;
-			}
+			if (z[i][j] < MIN_DEPTH) z[i][j] = MIN_DEPTH;
 
 #undef disparity
 #undef scaleFactor
@@ -285,9 +275,9 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 		/* Notify GUI monitor about depth information update. */
 		if (g_mutex_trylock(&monitor_data.lock)) {
 			memcpy(monitor_data.depth, z, DEPTH_MATRIX_SIZE);
-			g_mutex_unlock(&monitor_data.lock);
 			if (monitor_data.depth_widget)
 				gtk_widget_queue_draw(monitor_data.depth_widget);
+			g_mutex_unlock(&monitor_data.lock);
 		}
 
 	}
