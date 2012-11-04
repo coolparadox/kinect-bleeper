@@ -52,6 +52,9 @@ static char args_doc[] = "";
 
 static struct argp_option options[] = {
 	{ "fps", 'f', 0, 0, "Show average frames per second acquired from device." },
+#ifdef GTK
+	{ "monitor", 'm', 0, 0, "Start the monitor GUI." },
+#endif // GTK
         { 0 }
 
 };
@@ -59,6 +62,9 @@ static struct argp_option options[] = {
 struct arguments {
 
 	int fps;
+#ifdef GTK
+	int monitor;
+#endif // GTK
 
 };
 
@@ -69,6 +75,11 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
 		case 'f':
 			arguments->fps = 1;
 			break;
+#ifdef GTK
+		case 'm':
+			arguments->monitor = 1;
+			break;
+#endif // GTK
 		case ARGP_KEY_ARG:
 			switch (state->arg_num) {
 				default:
@@ -97,6 +108,7 @@ void signal_cleanup(int num) {
  */
 
 int fps;
+int monitor;
 
 int main (int argc, char **argv) {
 
@@ -105,13 +117,8 @@ int main (int argc, char **argv) {
 	freenect_context *ctx;
 	freenect_device *dev;
 
-#ifdef GTK
-	/* Initialize gtk library. */
-	gtk_init (&argc, &argv);
-#endif // GTK
-
 	/* Get CLI arguments. */
-	arguments.fps = 0;
+	memset(&arguments, 0, sizeof(struct arguments));
         argp_parse (&argp, argc, argv, 0, 0, &arguments);
 	fps = arguments.fps;
 
@@ -143,17 +150,24 @@ int main (int argc, char **argv) {
 
 #ifdef GTK
 
-	/* Start the GUI monitor. */
-	g_mutex_init(&monitor_data.lock);
-	monitor_data.running = &running;
-	monitor_data.freenect_frame_width = KINETIC_DEPTH_FRAME_WIDTH;
-	monitor_data.freenect_frame_height = KINETIC_DEPTH_FRAME_HEIGHT;
-	monitor_data.freenect_bits_per_depth = KINETIC_DEPTH_BITS_PER_DEPTH;
-	monitor_data.depth = malloc(DEPTH_MATRIX_SIZE);
-	memset(monitor_data.depth, 0, DEPTH_MATRIX_SIZE);
-	monitor_data.depth_widget = NULL;
-	g_thread_new("monitor", monitor_thread, &monitor_data);
-	fprintf(stderr, "gui monitor started.\n");
+	/* Initialize GUI monitor. */
+	gtk_init (&argc, &argv);
+	monitor = arguments.monitor;
+	if (monitor) {
+
+		/* Start the GUI monitor thread. */
+		g_mutex_init(&monitor_data.lock);
+		monitor_data.running = &running;
+		monitor_data.freenect_frame_width = KINETIC_DEPTH_FRAME_WIDTH;
+		monitor_data.freenect_frame_height = KINETIC_DEPTH_FRAME_HEIGHT;
+		monitor_data.freenect_bits_per_depth = KINETIC_DEPTH_BITS_PER_DEPTH;
+		monitor_data.depth = malloc(DEPTH_MATRIX_SIZE);
+		memset(monitor_data.depth, 0, DEPTH_MATRIX_SIZE);
+		monitor_data.depth_widget = NULL;
+		g_thread_new("monitor", monitor_thread, &monitor_data);
+		fprintf(stderr, "gui monitor started.\n");
+
+	}
 
 #endif // GTK
 
@@ -215,12 +229,16 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 #ifdef GTK
 
-	/* Notify GUI monitor about depth information update. */
-	if (g_mutex_trylock(&monitor_data.lock)) {
-		memcpy(monitor_data.depth, z, DEPTH_MATRIX_SIZE);
-		g_mutex_unlock(&monitor_data.lock);
-		if (monitor_data.depth_widget)
-			gtk_widget_queue_draw(monitor_data.depth_widget);
+	if (monitor) {
+
+		/* Notify GUI monitor about depth information update. */
+		if (g_mutex_trylock(&monitor_data.lock)) {
+			memcpy(monitor_data.depth, z, DEPTH_MATRIX_SIZE);
+			g_mutex_unlock(&monitor_data.lock);
+			if (monitor_data.depth_widget)
+				gtk_widget_queue_draw(monitor_data.depth_widget);
+		}
+
 	}
 
 #endif // GTK
