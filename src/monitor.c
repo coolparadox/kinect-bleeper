@@ -50,8 +50,6 @@ void *monitor_thread(void *monitor_data) {
 
 }
 
-#define MAX_DEPTH 4
-
 void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 
 	size_t i, j, k;
@@ -71,17 +69,27 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 		for (i = 0; i < data->freenect_frame_width ; i++ ) {
 
 			/* Convert depth value to 8-bit gray level. */
-			double depth = data->depth[j * data->freenect_frame_width + i];
-			if (depth < 0) depth = 0;
-			if (depth > MAX_DEPTH) {
-				depth = MAX_DEPTH;
-			}
-			long int gray_level = lrint(depth * (double) 0xFF / MAX_DEPTH);
+
+#define depth(i,j) data->depth[j * data->freenect_frame_width + i]
+#define min data->min_depth
+#define max data->max_depth
+#define A ((double) 0xFF / (max - min))
+#define B ((double) 0xFF * min / (min - max))
+#define gray_depth(i,j) (depth(i,j) * A + B)
+
+			long int gray_level = lrint(gray_depth(i, j));
+#undef gray_depth
+#undef B
+#undef A
+#undef max
+#undef min
+#undef depth
+
 			if (gray_level > 0xFF) {
 				fprintf(stderr, "alert: pixel value overflow\n");
 				gray_level = 0xFF;
 			}
-			uint8_t pixel_value = 0xFF - (uint8_t) gray_level;
+			uint8_t pixel_value = (uint8_t) 0xFF - (uint8_t) gray_level;
 			if (pixel_value >= 0xFF) pixel_value = 0;
 
 			/* Fill buffer for this RGB pixel. */

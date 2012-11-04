@@ -12,6 +12,7 @@
 
 #include <config.h>
 
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <argp.h>
@@ -26,6 +27,15 @@
 
 #define KINETIC_DEPTH_FRAME_SIZE (sizeof(uint16_t) * KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT)
 #define DEPTH_MATRIX_SIZE (sizeof(double) * KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT)
+
+/* Dynamic operation range in meters. */
+#define MIN_DEPTH 0.45
+#define MAX_DEPTH 10
+
+#define MAX_DEPTH_DEFAULT 2.5
+
+#define STR(X) #X
+#define XSTR(X) STR(X)
 
 #ifdef GTK
 
@@ -52,6 +62,7 @@ static char args_doc[] = "";
 
 static struct argp_option options[] = {
 	{ "fps", 'f', 0, 0, "Show average frames per second acquired from device." },
+	{ "maxdepth", 'x', "MAX_DEPTH", 0, "Maximum depth in meters [" XSTR(MAX_DEPTH_DEFAULT) "]." },
 #ifdef GTK
 	{ "monitor", 'm', 0, 0, "Start the monitor GUI." },
 #endif // GTK
@@ -62,9 +73,12 @@ static struct argp_option options[] = {
 struct arguments {
 
 	int fps;
+	char *max_depth;
+
 #ifdef GTK
 	int monitor;
 #endif // GTK
+
 
 };
 
@@ -74,6 +88,9 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
         switch (key) {
 		case 'f':
 			arguments->fps = 1;
+			break;
+		case 'x':
+			arguments->max_depth = arg;
 			break;
 #ifdef GTK
 		case 'm':
@@ -109,6 +126,7 @@ void signal_cleanup(int num) {
 
 int fps;
 int monitor;
+double max_depth;
 
 int main (int argc, char **argv) {
 
@@ -117,10 +135,33 @@ int main (int argc, char **argv) {
 	freenect_context *ctx;
 	freenect_device *dev;
 
-	/* Get CLI arguments. */
+	/* Parse CLI arguments. */
 	memset(&arguments, 0, sizeof(struct arguments));
         argp_parse (&argp, argc, argv, 0, 0, &arguments);
 	fps = arguments.fps;
+	if (arguments.max_depth) {
+
+		char *tail;
+		max_depth = strtod(arguments.max_depth, &tail);
+		if (*tail) {
+			fprintf(stderr, "error: cannot understand '%s' as a "
+				"float decimal number.\n", arguments.max_depth);
+			return(1);
+		}
+		if (max_depth < MIN_DEPTH) {
+			fprintf(stderr, "error: MAX_DEPTH must be no lesser than "
+							"%s.\n", XSTR(MIN_DEPTH));
+			return(1);
+		}
+		if (max_depth > MAX_DEPTH) {
+			fprintf(stderr, "error: MAX_DEPTH must be no greater than "
+							"%s.\n", XSTR(MAX_DEPTH));
+			return(1);
+		}
+
+	}
+	else
+		max_depth = MAX_DEPTH_DEFAULT;
 
 	/* Cleanup on interruption. */
 	signal(SIGINT, signal_cleanup);
@@ -162,6 +203,8 @@ int main (int argc, char **argv) {
 		monitor_data.freenect_frame_height = KINETIC_DEPTH_FRAME_HEIGHT;
 		monitor_data.freenect_bits_per_depth = KINETIC_DEPTH_BITS_PER_DEPTH;
 		monitor_data.depth = malloc(DEPTH_MATRIX_SIZE);
+		monitor_data.min_depth = MIN_DEPTH;
+		monitor_data.max_depth = max_depth;
 		memset(monitor_data.depth, 0, DEPTH_MATRIX_SIZE);
 		monitor_data.depth_widget = NULL;
 		g_thread_new("monitor", monitor_thread, &monitor_data);
@@ -214,10 +257,16 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 			z[i][j] = tan(disparity(i, j) / 2842.5 + 1.1863)
 							* 0.1236 - 0.037;
-			//x[i][j] = ((double) i - WIDTH / 2) * (z[i][j] + minDistance)
-						//* scaleFactor * (WIDTH / HEIGHT);
-			//y[i][j] = ((double) j - HEIGHT / 2) * (z[i][j] + minDistance)
-								//* scaleFactor;
+			//x[i][j] = ((double) i - WIDTH / 2) *
+			//				(z[i][j] + minDistance)
+					//* scaleFactor * (WIDTH / HEIGHT);
+			//y[i][j] = ((double) j - HEIGHT / 2) *
+			//		(z[i][j] + minDistance) * scaleFactor;
+			if (z[i][j] > max_depth) z[i][j] = max_depth;
+			if (z[i][j] < MIN_DEPTH) {
+				//fprintf(stderr, "MIN_DEPT trap\n");
+				z[i][j] = MIN_DEPTH;
+			}
 
 #undef disparity
 #undef scaleFactor
