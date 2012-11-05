@@ -61,6 +61,16 @@ void *monitor_thread(void *monitor_data) {
 
 }
 
+struct rgb {
+
+	double red;
+	double green;
+	double blue;
+
+};
+
+void color_for_depth(struct rgb *rgb, double depth, double min_depth, double max_depth);
+
 void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 
 	size_t i, j, k;
@@ -114,8 +124,10 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 	cairo_paint(cr);
 
 	/* Mark the nearest position. */
-	cairo_set_source_rgb(cr, 0.8, 0.8, 0);
-	cairo_set_line_width(cr, 2);
+	struct rgb rgb;
+	color_for_depth(&rgb, data->nearest_depth, data->min_depth, data->max_depth);
+	cairo_set_source_rgb(cr, rgb.red, rgb.green, rgb.blue);
+	cairo_set_line_width(cr, 10);
 	cairo_arc(cr, data->nearest_coord[0], data->nearest_coord[1], 10, 0, 2 * M_PI);
 	cairo_stroke(cr);
 
@@ -124,8 +136,70 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 
 }
 
-
 #undef unlock
 #undef lock
 #undef data
+
+double normalize(double value, double min, double max) {
+
+#define A ((double) 1 / (max - min))
+#define B (min / (min - max))
+
+	return(value * A + B);
+
+#undef B
+#undef A
+
+}
+
+double interpolate(double norm, double min, double max) {
+
+#define A (max - min)
+#define B min
+
+	return(norm * A + B);
+
+#undef B
+#undef A
+
+}
+
+struct rgb blue_rgb = { 0, 0, 1 };
+struct rgb green_rgb = { 0, 1, 0 };
+struct rgb yellow_rgb = { 1, 1, 0 };
+struct rgb orange_rgb = { 1, 0.5, 0 };
+struct rgb red_rgb = { 1, 0, 0 };
+
+void interpolate_rgb(struct rgb *target, struct rgb *rgb_min, struct rgb *rgb_max,
+		double value, double value_min, double value_max) {
+
+	double norm = normalize(value, value_min, value_max);
+	target->red = interpolate(norm, rgb_min->red, rgb_max->red);
+	target->green = interpolate(norm, rgb_min->green, rgb_max->green);
+	target->blue = interpolate(norm, rgb_min->blue, rgb_max->blue);
+
+}
+
+void color_for_depth(struct rgb *rgb, double depth, double min_depth, double max_depth) {
+
+#define BLUE_DEPTH (min_depth + (max_depth - min_depth) * 1.00)
+#define GREEN_DEPTH (min_depth + (max_depth - min_depth) * 0.75)
+#define YELLOW_DEPTH (min_depth + (max_depth - min_depth) * 0.50)
+#define ORANGE_DEPTH (min_depth + (max_depth - min_depth) * 0.25)
+#define RED_DEPTH (min_depth + (max_depth - min_depth) * 0.00)
+
+	if (depth > BLUE_DEPTH)
+		memcpy(rgb, &blue_rgb, sizeof(struct rgb));
+	else if (depth > GREEN_DEPTH)
+		interpolate_rgb(rgb, &blue_rgb, &green_rgb, depth, BLUE_DEPTH, GREEN_DEPTH);
+	else if (depth > YELLOW_DEPTH)
+		interpolate_rgb(rgb, &green_rgb, &yellow_rgb, depth, GREEN_DEPTH, YELLOW_DEPTH);
+	else if (depth > ORANGE_DEPTH)
+		interpolate_rgb(rgb, &yellow_rgb, &orange_rgb, depth, YELLOW_DEPTH, ORANGE_DEPTH);
+	else if (depth > RED_DEPTH)
+		interpolate_rgb(rgb, &orange_rgb, &red_rgb, depth, ORANGE_DEPTH, RED_DEPTH);
+	else
+		memcpy(rgb, &red_rgb, sizeof(struct rgb));
+
+}
 

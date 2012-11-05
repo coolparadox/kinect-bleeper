@@ -43,7 +43,7 @@
 #define MIN_GRID_SIZE 1
 #define MAX_GRID_SIZE 160
 
-#define GRID_SIZE_DEFAULT 20
+#define GRID_SIZE_DEFAULT 10
 
 #define STR(X) #X
 #define XSTR(X) STR(X)
@@ -155,6 +155,7 @@ double max_depth;
 unsigned long int smooth;
 double smooth_factor;
 size_t grid_size;
+double z[KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT];
 
 int main (int argc, char **argv) {
 
@@ -262,6 +263,7 @@ int main (int argc, char **argv) {
 		fprintf(stderr, "error: cannot set depth mode.\n");
 		goto shutdown;
 	}
+	memset(z, 0, sizeof(double) * KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT);
 	freenect_set_depth_callback(dev, process_depth);
 	if (freenect_start_depth(dev)) {
 		fprintf(stderr, "error: cannot start depth stream.\n");
@@ -320,9 +322,14 @@ shutdown:
 void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 	size_t i, j;
-	double z[KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT];
+
+	size_t nearest_i, nearest_j;
+	double nearest_z;
 
 	/* Travel through the pixelated grid. */
+	nearest_i = KINETIC_DEPTH_FRAME_WIDTH / grid_size / 2;
+	nearest_j = KINETIC_DEPTH_FRAME_HEIGHT / grid_size / 2;
+	nearest_z = max_depth;
 	for (j = 0; j < KINETIC_DEPTH_FRAME_HEIGHT / grid_size; j++)
 	for (i = 0; i < KINETIC_DEPTH_FRAME_WIDTH / grid_size; i++) {
 
@@ -340,7 +347,7 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 			 * http://openkinect.org/wiki/Imaging_Information#Depth_Camera */
 
 #define BUFPOS(x,y) ((y) * KINETIC_DEPTH_FRAME_WIDTH + (x))
-#define DISPARITY(x,y) ((uint16_t *) depth)[BUFPOS((x),(y))]
+#define DISPARITY(x,y) ((uint16_t *) depth)[BUFPOS(x,y)]
 
 			z_new = tan(DISPARITY(i * grid_size + is, j * grid_size + js)
 					/ 2842.5 + 1.1863) * 0.1236 - 0.037;
@@ -361,10 +368,23 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 		else
 			z_smooth = max_depth;
 
+		/* Discover the nearest grid position. */
+		if (z_smooth < nearest_z) {
+
+			nearest_i = i;
+			nearest_j = j;
+			nearest_z = z_smooth;
+
+		}
+
+#ifdef GTK
+
 		/* Replicate the current grid cell to the depth matrix. */
 		for (is = 0; is < grid_size; is++)
 		for (js = 0; js < grid_size; js++)
 			z[BUFPOS(i * grid_size + is, j * grid_size + js)] = z_smooth;
+
+#endif // GTK
 
 #undef DISPARITY
 #undef BUFPOS
@@ -378,9 +398,11 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 		/* Notify GUI monitor about depth information update. */
 		if (g_mutex_trylock(&monitor_data.lock)) {
 			memcpy(monitor_data.depth, z, DEPTH_MATRIX_SIZE);
-			monitor_data.nearest_coord[0] = 0;
-			monitor_data.nearest_coord[1] = 0;
-			monitor_data.nearest_depth = max_depth;
+			monitor_data.nearest_coord[0] = nearest_i * grid_size
+							+ (grid_size / 2);
+			monitor_data.nearest_coord[1] = nearest_j * grid_size
+							+ (grid_size / 2);
+			monitor_data.nearest_depth = nearest_z;
 			g_mutex_unlock(&monitor_data.lock);
 			if (monitor_data.depth_widget)
 				gtk_widget_queue_draw(monitor_data.depth_widget);
