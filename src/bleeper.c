@@ -25,8 +25,7 @@
 #define KINETIC_DEPTH_FRAME_HEIGHT 480
 #define KINETIC_DEPTH_BITS_PER_DEPTH 11
 
-#define DEPTH_MATRIX_SIZE (sizeof(double) * KINETIC_DEPTH_FRAME_WIDTH * \
-						KINETIC_DEPTH_FRAME_HEIGHT)
+#define DEPTH_MATRIX_SIZE (sizeof(double) * KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT)
 
 /* Dynamic operation range in meters. */
 #define MIN_DEPTH 0.45
@@ -39,6 +38,12 @@
 #define MAX_SMOOTH 100
 
 #define SMOOTH_DEFAULT 10
+
+/* Size of pixelization grid. */
+#define MIN_GRID_SIZE 1
+#define MAX_GRID_SIZE 160
+
+#define GRID_SIZE_DEFAULT 20
 
 #define STR(X) #X
 #define XSTR(X) STR(X)
@@ -73,6 +78,8 @@ static struct argp_option options[] = {
 						XSTR(MAX_DEPTH_DEFAULT) "]." },
 	{ "smooth", 's', "SAMPLES", 0, "Number of samples for exponential "
 		"moving average noise reduction [" XSTR(SMOOTH_DEFAULT) "]." },
+	{ "grid", 'g', "GRID_SIZE", 0, "Size of pixelization grid ["
+						XSTR(GRID_SIZE_DEFAULT) "]." },
 #ifdef GTK
 	{ "monitor", 'm', 0, 0, "Start the monitor GUI." },
 #endif // GTK
@@ -85,6 +92,7 @@ struct arguments {
 	int fps;
 	char *max_depth;
 	char *smooth;
+	char *grid_size;
 
 #ifdef GTK
 	int monitor;
@@ -105,6 +113,9 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
 			break;
 		case 's':
 			arguments->smooth = arg;
+			break;
+		case 'g':
+			arguments->grid_size = arg;
 			break;
 #ifdef GTK
 		case 'm':
@@ -143,7 +154,7 @@ int monitor;
 double max_depth;
 unsigned long int smooth;
 double smooth_factor;
-double z[KINETIC_DEPTH_FRAME_WIDTH][KINETIC_DEPTH_FRAME_HEIGHT];
+size_t grid_size;
 
 int main (int argc, char **argv) {
 
@@ -181,6 +192,7 @@ int main (int argc, char **argv) {
 	}
 	else
 		max_depth = MAX_DEPTH_DEFAULT;
+	fprintf(stderr, "dynamic range: %.2lf - %.2lf meters\n", MIN_DEPTH, max_depth);
 	if (arguments.smooth) {
 
 		char *tail;
@@ -204,7 +216,32 @@ int main (int argc, char **argv) {
 	}
 	else
 		smooth = SMOOTH_DEFAULT;
+	fprintf(stderr, "samples for smoothing: %lu\n", smooth);
 	smooth_factor = (double) 2.0 / ((double) smooth + 1);
+	if (arguments.grid_size) {
+
+		char *tail;
+		grid_size = strtoul(arguments.grid_size, &tail, 10);
+		if (*tail) {
+			fprintf(stderr, "error: cannot understand '%s' as an "
+				"integer decimal number.\n", arguments.grid_size);
+			return(1);
+		}
+		if (grid_size < MIN_GRID_SIZE) {
+			fprintf(stderr, "error: GRID_SIZE must be no lesser than "
+						"%s.\n", XSTR(MIN_GRID_SIZE));
+			return(1);
+		}
+		if (grid_size > MAX_GRID_SIZE) {
+			fprintf(stderr, "error: GRID_SIZE must be no greater than "
+						"%s.\n", XSTR(MAX_GRID_SIZE));
+			return(1);
+		}
+
+	}
+	else
+		grid_size = GRID_SIZE_DEFAULT;
+	fprintf(stderr, "pixelization grid size: %lu\n", grid_size);
 
 	/* Cleanup on interruption. */
 	signal(SIGINT, signal_cleanup);
@@ -225,17 +262,12 @@ int main (int argc, char **argv) {
 		fprintf(stderr, "error: cannot set depth mode.\n");
 		goto shutdown;
 	}
-	for (i = 0; i < KINETIC_DEPTH_FRAME_WIDTH; i++)
-		for (j = 0; j < KINETIC_DEPTH_FRAME_HEIGHT; j++)
-			z[i][j] = 0;
 	freenect_set_depth_callback(dev, process_depth);
 	if (freenect_start_depth(dev)) {
 		fprintf(stderr, "error: cannot start depth stream.\n");
 		goto shutdown;
 	}
-	fprintf(stderr, "depth stream initialized, ");
-	fprintf(stderr, "dynamic range: %.2lf - %.2lf meters\n", MIN_DEPTH,
-								max_depth);
+	fprintf(stderr, "depth stream initialized\n");
 
 #ifdef GTK
 
@@ -253,6 +285,9 @@ int main (int argc, char **argv) {
 		monitor_data.depth = malloc(DEPTH_MATRIX_SIZE);
 		monitor_data.min_depth = MIN_DEPTH;
 		monitor_data.max_depth = max_depth;
+		monitor_data.nearest_coord[0] = 0;
+		monitor_data.nearest_coord[1] = 0;
+		monitor_data.nearest_depth = max_depth;
 		memset(monitor_data.depth, 0, DEPTH_MATRIX_SIZE);
 		monitor_data.depth_widget = NULL;
 		g_thread_new("monitor", monitor_thread, &monitor_data);
@@ -285,35 +320,56 @@ shutdown:
 void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 	size_t i, j;
+	double z[KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT];
 
-	/* Convert raw disparity values to real world distance information.
-	See http://openkinect.org/wiki/Imaging_Information#Depth_Camera */
+	/* Travel through the pixelated grid. */
+	for (j = 0; j < KINETIC_DEPTH_FRAME_HEIGHT / grid_size; j++)
+	for (i = 0; i < KINETIC_DEPTH_FRAME_WIDTH / grid_size; i++) {
 
-	double z_new;
+		size_t is, js;
+		double z_new;
+		double z_grid = 0;
+		double z_smooth;
 
-	for (i = 0; i < KINETIC_DEPTH_FRAME_WIDTH; i++)
-		for (j = 0; j < KINETIC_DEPTH_FRAME_HEIGHT; j++) {
+		/* Account the depth value for the current grid cell. */
+		for (js = 0; js < grid_size; js++)
+		for (is = 0; is < grid_size; is++) {
 
-#define minDistance -10
-#define scaleFactor 0.0021
-#define disparity(i,j) ((uint16_t *) depth)[i * KINETIC_DEPTH_FRAME_HEIGHT + j]
+			/* Convert raw disparity values to real world distance
+			 * information.  See
+			 * http://openkinect.org/wiki/Imaging_Information#Depth_Camera */
 
-			z_new = tan(disparity(i, j) / 2842.5 + 1.1863)
-								* 0.1236 - 0.037;
+#define BUFPOS(x,y) ((y) * KINETIC_DEPTH_FRAME_WIDTH + (x))
+#define DISPARITY(x,y) ((uint16_t *) depth)[BUFPOS((x),(y))]
+
+			z_new = tan(DISPARITY(i * grid_size + is, j * grid_size + js)
+					/ 2842.5 + 1.1863) * 0.1236 - 0.037;
 			if (z_new > max_depth) z_new = max_depth;
-			if (z_new >= MIN_DEPTH) {
-				z[i][j] = smooth_factor * z_new +
-						(1 - smooth_factor) * z[i][j];
-			}
-			else {
-				z[i][j] = max_depth;
-			}
-
-#undef disparity
-#undef scaleFactor
-#undef minDistance
+			if (z_new < MIN_DEPTH) z_new = max_depth;
+			z_grid += z_new;
 
 		}
+		z_grid /= pow(grid_size, 2);
+		if (z_grid > max_depth) z_grid = max_depth;
+
+		/* Smooth the value of the current grid cell. */
+		if (z_grid >= MIN_DEPTH) {
+			double z_old = z[BUFPOS(i * grid_size, j * grid_size)];
+			z_smooth = smooth_factor * z_grid +
+						(1 - smooth_factor) * z_old;
+			}
+		else
+			z_smooth = max_depth;
+
+		/* Replicate the current grid cell to the depth matrix. */
+		for (is = 0; is < grid_size; is++)
+		for (js = 0; js < grid_size; js++)
+			z[BUFPOS(i * grid_size + is, j * grid_size + js)] = z_smooth;
+
+#undef DISPARITY
+#undef BUFPOS
+
+	}
 
 #ifdef GTK
 
@@ -322,9 +378,12 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 		/* Notify GUI monitor about depth information update. */
 		if (g_mutex_trylock(&monitor_data.lock)) {
 			memcpy(monitor_data.depth, z, DEPTH_MATRIX_SIZE);
+			monitor_data.nearest_coord[0] = 0;
+			monitor_data.nearest_coord[1] = 0;
+			monitor_data.nearest_depth = max_depth;
+			g_mutex_unlock(&monitor_data.lock);
 			if (monitor_data.depth_widget)
 				gtk_widget_queue_draw(monitor_data.depth_widget);
-			g_mutex_unlock(&monitor_data.lock);
 		}
 
 	}

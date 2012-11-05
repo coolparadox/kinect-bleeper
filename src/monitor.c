@@ -67,14 +67,14 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 
 	/* Update the Cairo surface representing the depth information. */
 	lock(data);
-	for (j = 0; j < data->freenect_frame_height ; j++ ) {
+	for (j = 0; j < data->freenect_frame_height ; j++) {
 
 		k = j * (stride >> 2); // surface buffer pixel column index;
-		for (i = 0; i < data->freenect_frame_width ; i++ ) {
+		for (i = 0; i < data->freenect_frame_width ; i++) {
 
 			/* Convert depth value to 8-bit gray level. */
 
-#define depth(i,j) data->depth[j * data->freenect_frame_width + i]
+#define depth(i,j) data->depth[(j) * data->freenect_frame_width + (i)]
 #define min data->min_depth
 #define max data->max_depth
 #define A ((double) 0xFF / (max - min))
@@ -98,10 +98,8 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 			/* Represent the 8-bit gray level in a 32-bit RGB pixel
 			 * where the brighter, the closer. */
 			uint32_t gray_value = (uint32_t) 0xFF - gray_level;
-			((uint32_t *) surface_buffer)[k++] =
-						(gray_value << 8 |
-						gray_value) << 8 |
-						gray_value;
+			((uint32_t *) surface_buffer)[k++] = (gray_value << 8 |
+						gray_value) << 8 | gray_value;
 
 		}
 	}
@@ -114,6 +112,12 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 	/* Paint the new surface data in the wodget. */
 	cairo_set_source_surface(cr, new_surface, 0, 0);
 	cairo_paint(cr);
+
+	/* Mark the nearest position. */
+	cairo_set_source_rgb(cr, 0.8, 0.8, 0);
+	cairo_set_line_width(cr, 2);
+	cairo_arc(cr, data->nearest_coord[0], data->nearest_coord[1], 10, 0, 2 * M_PI);
+	cairo_stroke(cr);
 
 	unlock(data);
 	return;

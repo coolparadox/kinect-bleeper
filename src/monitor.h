@@ -22,6 +22,8 @@ struct monitor_data {
 	int freenect_bits_per_depth;
 	double *depth;
 	double min_depth, max_depth;
+	size_t nearest_coord[2];
+	double nearest_depth;
 	GtkWidget *depth_widget;
 
 };
