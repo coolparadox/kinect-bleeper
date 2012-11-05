@@ -12,6 +12,7 @@
 
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 
 #include "monitor.h"
 
@@ -90,18 +91,17 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 #undef depth
 
 			if (gray_level > 0xFF) {
-				fprintf(stderr, "alert: pixel value overflow\n");
+				fprintf(stderr, "alert: pixel value overflow!\n");
 				gray_level = 0xFF;
 			}
 
 			/* Represent the 8-bit gray level in a 32-bit RGB pixel
 			 * where the brighter, the closer. */
-			uint8_t gray_value = (uint8_t) 0xFF - gray_level;
-			if (gray_value >= 0xFF) gray_value = 0;
+			uint32_t gray_value = (uint32_t) 0xFF - gray_level;
 			((uint32_t *) surface_buffer)[k++] =
-						((uint32_t) gray_value << 8 |
-						(uint32_t) gray_value) << 8 |
-						(uint32_t) gray_value;
+						(gray_value << 8 |
+						gray_value) << 8 |
+						gray_value;
 
 		}
 	}

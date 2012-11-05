@@ -25,14 +25,20 @@
 #define KINETIC_DEPTH_FRAME_HEIGHT 480
 #define KINETIC_DEPTH_BITS_PER_DEPTH 11
 
-#define KINETIC_DEPTH_FRAME_SIZE (sizeof(uint16_t) * KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT)
-#define DEPTH_MATRIX_SIZE (sizeof(double) * KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT)
+#define DEPTH_MATRIX_SIZE (sizeof(double) * KINETIC_DEPTH_FRAME_WIDTH * \
+						KINETIC_DEPTH_FRAME_HEIGHT)
 
 /* Dynamic operation range in meters. */
 #define MIN_DEPTH 0.45
 #define MAX_DEPTH 10
 
 #define MAX_DEPTH_DEFAULT 2.5
+
+/* EMA bars for pixel noise reduction. */
+#define MIN_SMOOTH 1
+#define MAX_SMOOTH 100
+
+#define SMOOTH_DEFAULT 10
 
 #define STR(X) #X
 #define XSTR(X) STR(X)
@@ -61,8 +67,12 @@ static char doc[] = "kinect_bleeper -- obstacle avoidance using sounds and "
 static char args_doc[] = "";
 
 static struct argp_option options[] = {
-	{ "fps", 'f', 0, 0, "Show average frames per second acquired from device." },
-	{ "maxdepth", 'x', "MAX_DEPTH", 0, "Maximum depth in meters [" XSTR(MAX_DEPTH_DEFAULT) "]." },
+	{ "fps", 'f', 0, 0, "Show average frames per second acquired from "
+								"device." },
+	{ "maxdepth", 'x', "MAX_DEPTH", 0, "Maximum depth in meters ["
+						XSTR(MAX_DEPTH_DEFAULT) "]." },
+	{ "smooth", 's', "SAMPLES", 0, "Number of samples for exponential "
+		"moving average noise reduction [" XSTR(SMOOTH_DEFAULT) "]." },
 #ifdef GTK
 	{ "monitor", 'm', 0, 0, "Start the monitor GUI." },
 #endif // GTK
@@ -74,6 +84,7 @@ struct arguments {
 
 	int fps;
 	char *max_depth;
+	char *smooth;
 
 #ifdef GTK
 	int monitor;
@@ -91,6 +102,9 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
 			break;
 		case 'x':
 			arguments->max_depth = arg;
+			break;
+		case 's':
+			arguments->smooth = arg;
 			break;
 #ifdef GTK
 		case 'm':
@@ -127,8 +141,13 @@ void signal_cleanup(int num) {
 int fps;
 int monitor;
 double max_depth;
+unsigned long int smooth;
+double smooth_factor;
+double z[KINETIC_DEPTH_FRAME_WIDTH][KINETIC_DEPTH_FRAME_HEIGHT];
 
 int main (int argc, char **argv) {
+
+	size_t i, j;
 
 	struct arguments arguments;
 
@@ -162,6 +181,30 @@ int main (int argc, char **argv) {
 	}
 	else
 		max_depth = MAX_DEPTH_DEFAULT;
+	if (arguments.smooth) {
+
+		char *tail;
+		smooth = strtoul(arguments.smooth, &tail, 10);
+		if (*tail) {
+			fprintf(stderr, "error: cannot understand '%s' as an "
+				"integer decimal number.\n", arguments.smooth);
+			return(1);
+		}
+		if (smooth < MIN_SMOOTH) {
+			fprintf(stderr, "error: SAMPLES must be no lesser than "
+							"%s.\n", XSTR(MIN_SMOOTH));
+			return(1);
+		}
+		if (smooth > MAX_SMOOTH) {
+			fprintf(stderr, "error: SAMPLES must be no greater than "
+							"%s.\n", XSTR(MAX_SMOOTH));
+			return(1);
+		}
+
+	}
+	else
+		smooth = SMOOTH_DEFAULT;
+	smooth_factor = (double) 2.0 / ((double) smooth + 1);
 
 	/* Cleanup on interruption. */
 	signal(SIGINT, signal_cleanup);
@@ -182,6 +225,9 @@ int main (int argc, char **argv) {
 		fprintf(stderr, "error: cannot set depth mode.\n");
 		goto shutdown;
 	}
+	for (i = 0; i < KINETIC_DEPTH_FRAME_WIDTH; i++)
+		for (j = 0; j < KINETIC_DEPTH_FRAME_HEIGHT; j++)
+			z[i][j] = 0;
 	freenect_set_depth_callback(dev, process_depth);
 	if (freenect_start_depth(dev)) {
 		fprintf(stderr, "error: cannot start depth stream.\n");
@@ -243,28 +289,29 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 	/* Convert raw disparity values to real world distance information.
 	See http://openkinect.org/wiki/Imaging_Information#Depth_Camera */
 
-#define WIDTH KINETIC_DEPTH_FRAME_WIDTH
-#define HEIGHT KINETIC_DEPTH_FRAME_HEIGHT
+	double z_new;
 
-	static double z[WIDTH][HEIGHT];
-
-	for (i = 0; i < WIDTH; i++)
-		for (j = 0; j < HEIGHT; j++) {
+	for (i = 0; i < KINETIC_DEPTH_FRAME_WIDTH; i++)
+		for (j = 0; j < KINETIC_DEPTH_FRAME_HEIGHT; j++) {
 
 #define minDistance -10
 #define scaleFactor 0.0021
-#define disparity(i,j) ((uint16_t *) depth)[i * HEIGHT + j]
+#define disparity(i,j) ((uint16_t *) depth)[i * KINETIC_DEPTH_FRAME_HEIGHT + j]
 
-			z[i][j] = tan(disparity(i, j) / 2842.5 + 1.1863)
-							* 0.1236 - 0.037;
-			if (z[i][j] > max_depth) z[i][j] = max_depth;
-			if (z[i][j] < MIN_DEPTH) z[i][j] = MIN_DEPTH;
+			z_new = tan(disparity(i, j) / 2842.5 + 1.1863)
+								* 0.1236 - 0.037;
+			if (z_new > max_depth) z_new = max_depth;
+			if (z_new >= MIN_DEPTH) {
+				z[i][j] = smooth_factor * z_new +
+						(1 - smooth_factor) * z[i][j];
+			}
+			else {
+				z[i][j] = max_depth;
+			}
 
 #undef disparity
 #undef scaleFactor
 #undef minDistance
-#undef HEIGHT
-#undef WIDTH
 
 		}
 
