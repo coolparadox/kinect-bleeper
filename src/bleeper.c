@@ -87,8 +87,9 @@ static struct argp_option options[] = {
 		"moving average noise reduction [" XSTR(SMOOTH_DEFAULT) "]." },
 	{ "grid", 'g', "GRID_SIZE", 0, "Size of pixelization grid ["
 						XSTR(GRID_SIZE_DEFAULT) "]." },
+	{ "mirror", 'm', 0, 0, "Mirror x axis." },
 #ifdef GTK
-	{ "monitor", 'm', 0, 0, "Start the monitor GUI." },
+	{ "monitor", 'w', 0, 0, "Start the monitor GUI." },
 #endif // GTK
         { 0 }
 
@@ -100,6 +101,7 @@ struct arguments {
 	char *max_depth;
 	char *smooth;
 	char *grid_size;
+	int mirror;
 
 #ifdef GTK
 	int monitor;
@@ -124,8 +126,11 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
 		case 'g':
 			arguments->grid_size = arg;
 			break;
-#ifdef GTK
 		case 'm':
+			arguments->mirror = 1;
+			break;
+#ifdef GTK
+		case 'w':
 			arguments->monitor = 1;
 			break;
 #endif // GTK
@@ -157,6 +162,7 @@ void signal_cleanup(int num) {
  */
 
 int fps;
+int mirror;
 int monitor;
 double max_depth;
 unsigned long int smooth;
@@ -179,6 +185,7 @@ int main (int argc, char **argv) {
 	memset(&arguments, 0, sizeof(struct arguments));
         argp_parse (&argp, argc, argv, 0, 0, &arguments);
 	fps = arguments.fps;
+	mirror = arguments.mirror;
 	if (arguments.max_depth) {
 
 		char *tail;
@@ -378,8 +385,9 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 			 * information.  See
 			 * http://openkinect.org/wiki/Imaging_Information#Depth_Camera */
 
+#define MIRROR(x) (mirror ? (KINETIC_DEPTH_FRAME_WIDTH - (x) - 1) : x)
 #define BUFPOS(x,y) ((y) * KINETIC_DEPTH_FRAME_WIDTH + (x))
-#define DISPARITY(x,y) ((uint16_t *) depth)[BUFPOS(x,y)]
+#define DISPARITY(x,y) ((uint16_t *) depth)[BUFPOS(MIRROR(x),y)]
 
 			z_new = tan(DISPARITY(i * grid_size + is, j * grid_size + js)
 					/ 2842.5 + 1.1863) * 0.1236 - 0.037;
@@ -417,6 +425,7 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 #undef DISPARITY
 #undef BUFPOS
+#undef MIRROR
 
 	}
 
