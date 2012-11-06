@@ -39,7 +39,7 @@ void *bleep_thread(void *thread_data) {
 		unlock(bleep_data);
 
 		/* Sleep for some time according to the target proximity. */
-		usleep(lrint(interpolate(z, 500000, 5000000)));
+		usleep(lrint(interpolate(z, 200000, 2000000)));
 
 		/* Notify stdout to bleep once. */
 		double freq = interpolate(y, 400, 4000);

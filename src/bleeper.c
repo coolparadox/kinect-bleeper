@@ -39,15 +39,15 @@
 
 /* EMA bars for pixel noise reduction. */
 #define MIN_SMOOTH 1
-#define MAX_SMOOTH 100
+#define MAX_SMOOTH 50
 
-#define SMOOTH_DEFAULT 10
+#define SMOOTH_DEFAULT 5
 
 /* Size of pixelization grid. */
 #define MIN_GRID_SIZE 1
-#define MAX_GRID_SIZE 160
+#define MAX_GRID_SIZE 120
 
-#define GRID_SIZE_DEFAULT 10
+#define GRID_SIZE_DEFAULT 8
 
 #define STR(X) #X
 #define XSTR(X) STR(X)
