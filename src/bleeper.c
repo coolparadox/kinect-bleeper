@@ -166,11 +166,14 @@ double z[KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT];
 
 int main (int argc, char **argv) {
 
-	pthread_t thread_bleep;
 	size_t i, j;
 	struct arguments arguments;
 	freenect_context *ctx;
 	freenect_device *dev;
+	pthread_t thread_bleep;
+#ifdef GTK
+	pthread_t thread_monitor;
+#endif // GTK
 
 	/* Parse CLI arguments. */
 	memset(&arguments, 0, sizeof(struct arguments));
@@ -305,7 +308,7 @@ int main (int argc, char **argv) {
 	if (monitor) {
 
 		/* Start the GUI monitor thread. */
-		g_mutex_init(&monitor_data.lock);
+		pthread_mutex_init(&monitor_data.lock, NULL);
 		monitor_data.running = &running;
 		monitor_data.freenect_frame_width = KINETIC_DEPTH_FRAME_WIDTH;
 		monitor_data.freenect_frame_height = KINETIC_DEPTH_FRAME_HEIGHT;
@@ -318,7 +321,7 @@ int main (int argc, char **argv) {
 		monitor_data.nearest_depth = max_depth;
 		memset(monitor_data.depth, 0, DEPTH_MATRIX_SIZE);
 		monitor_data.depth_widget = NULL;
-		g_thread_new("monitor", monitor_thread, &monitor_data);
+		pthread_create(&thread_monitor, NULL, &monitor_thread, &monitor_data);
 		fprintf(stderr, "gui monitor started.\n");
 
 	}
@@ -433,14 +436,14 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 	if (monitor) {
 
 		/* Notify GUI monitor about depth information update. */
-		if (g_mutex_trylock(&monitor_data.lock)) {
+		if (pthread_mutex_trylock(&monitor_data.lock)) {
 			memcpy(monitor_data.depth, z, DEPTH_MATRIX_SIZE);
 			monitor_data.nearest_coord[0] = nearest_i * grid_size
 							+ (grid_size / 2);
 			monitor_data.nearest_coord[1] = nearest_j * grid_size
 							+ (grid_size / 2);
 			monitor_data.nearest_depth = nearest_z;
-			g_mutex_unlock(&monitor_data.lock);
+			pthread_mutex_unlock(&monitor_data.lock);
 			if (monitor_data.depth_widget)
 				gtk_widget_queue_draw(monitor_data.depth_widget);
 		}

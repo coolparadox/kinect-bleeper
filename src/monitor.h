@@ -15,7 +15,7 @@
 
 struct monitor_data {
 
-	GMutex lock;
+	pthread_mutex_t lock;
 	volatile sig_atomic_t *running;
 	int freenect_frame_width;
 	int freenect_frame_height;

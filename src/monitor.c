@@ -23,8 +23,8 @@ unsigned char *surface_buffer;
 void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data);
 
 #define data ((struct monitor_data *) monitor_data)
-#define lock(data) g_mutex_lock(&data->lock)
-#define unlock(data) g_mutex_unlock(&data->lock)
+#define lock(data) pthread_mutex_lock(&data->lock)
+#define unlock(data) pthread_mutex_unlock(&data->lock)
 
 void *monitor_thread(void *monitor_data) {
 
