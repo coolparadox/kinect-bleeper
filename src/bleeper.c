@@ -18,8 +18,12 @@
 #include <argp.h>
 #include <signal.h>
 #include <math.h>
+#include <pthread.h>
 
 #include <libfreenect/libfreenect.h>
+
+#include "common.h"
+#include "bleep.h"
 
 #define KINETIC_DEPTH_FRAME_WIDTH 640
 #define KINETIC_DEPTH_FRAME_HEIGHT 480
@@ -47,6 +51,8 @@
 
 #define STR(X) #X
 #define XSTR(X) STR(X)
+
+struct bleep_data bleep_data;
 
 #ifdef GTK
 
@@ -271,6 +277,14 @@ int main (int argc, char **argv) {
 	}
 	fprintf(stderr, "depth stream initialized\n");
 
+	/* Initialize audio thread. */
+	pthread_mutex_init(&bleep_data.lock, NULL);
+	bleep_data.x = 0;
+	bleep_data.y = 0;
+	bleep_data.z = max_depth;
+	pthread_t thread_bleep;
+	pthread_create(&thread_bleep, NULL, &bleep_thread, &bleep_data);
+
 #ifdef GTK
 
 	/* Initialize GUI monitor. */
@@ -377,17 +391,22 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 		}
 
-#ifdef GTK
-
 		/* Replicate the current grid cell to the depth matrix. */
 		for (is = 0; is < grid_size; is++)
 		for (js = 0; js < grid_size; js++)
 			z[BUFPOS(i * grid_size + is, j * grid_size + js)] = z_smooth;
 
-#endif // GTK
-
 #undef DISPARITY
 #undef BUFPOS
+
+	}
+
+	if (pthread_mutex_trylock(&bleep_data.lock)) {
+
+		bleep_data.x = normalize(nearest_i, 0, KINETIC_DEPTH_FRAME_WIDTH / grid_size);
+		bleep_data.y = normalize(nearest_j, 0, KINETIC_DEPTH_FRAME_HEIGHT / grid_size);
+		bleep_data.z = normalize(nearest_z, MIN_DEPTH, max_depth);
+		pthread_mutex_unlock(&bleep_data.lock);
 
 	}
 

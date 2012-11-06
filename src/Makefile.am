@@ -1,13 +1,13 @@
 bin_PROGRAMS = kinect_bleeper
 
 if GTK
-kinect_bleeper_SOURCES = bleeper.c monitor.h monitor.c
+kinect_bleeper_SOURCES = bleeper.c bleep.c monitor.c common.c
 else
-kinect_bleeper_SOURCES = bleeper.c
+kinect_bleeper_SOURCES = bleeper.c bleep.c common.c
 endif
 
-kinect_bleeper_CFLAGS = @GTK_CFLAGS@
-kinect_bleeper_LDFLAGS = -lm @GTK_LDFLAGS@
+kinect_bleeper_CFLAGS = -pthread @GTK_CFLAGS@
+kinect_bleeper_LDFLAGS = -pthread -lm @GTK_LDFLAGS@
 
 MAINTAINERCLEANFILES = Makefile.in
 

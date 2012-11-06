@@ -14,6 +14,7 @@
 #include <math.h>
 #include <string.h>
 
+#include "common.h"
 #include "monitor.h"
 
 int stride;
@@ -139,30 +140,6 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 #undef unlock
 #undef lock
 #undef data
-
-double normalize(double value, double min, double max) {
-
-#define A ((double) 1 / (max - min))
-#define B (min / (min - max))
-
-	return(value * A + B);
-
-#undef B
-#undef A
-
-}
-
-double interpolate(double norm, double min, double max) {
-
-#define A (max - min)
-#define B min
-
-	return(norm * A + B);
-
-#undef B
-#undef A
-
-}
 
 struct rgb blue_rgb = { 0, 0, 1 };
 struct rgb green_rgb = { 0, 1, 0 };
