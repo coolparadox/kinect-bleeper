@@ -11,11 +11,14 @@
  */
 
 #include <pthread.h>
+#include <ao/ao.h>
 
 struct bleep_data {
 
 	pthread_mutex_t lock;
-	double x, y, z;
+	ao_device *audio_device;
+	ao_sample_format audio_format;
+	double x_norm, y_norm, z_norm;
 
 };
 

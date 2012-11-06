@@ -21,6 +21,7 @@
 #include <pthread.h>
 
 #include <libfreenect/libfreenect.h>
+#include <ao/ao.h>
 
 #include "common.h"
 #include "bleep.h"
@@ -165,10 +166,9 @@ double z[KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT];
 
 int main (int argc, char **argv) {
 
+	pthread_t thread_bleep;
 	size_t i, j;
-
 	struct arguments arguments;
-
 	freenect_context *ctx;
 	freenect_device *dev;
 
@@ -269,7 +269,8 @@ int main (int argc, char **argv) {
 		fprintf(stderr, "error: cannot set depth mode.\n");
 		goto shutdown;
 	}
-	memset(z, 0, sizeof(double) * KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT);
+	memset(z, 0, sizeof(double) * KINETIC_DEPTH_FRAME_WIDTH *
+						KINETIC_DEPTH_FRAME_HEIGHT);
 	freenect_set_depth_callback(dev, process_depth);
 	if (freenect_start_depth(dev)) {
 		fprintf(stderr, "error: cannot start depth stream.\n");
@@ -279,10 +280,21 @@ int main (int argc, char **argv) {
 
 	/* Initialize audio thread. */
 	pthread_mutex_init(&bleep_data.lock, NULL);
-	bleep_data.x = 0;
-	bleep_data.y = 0;
-	bleep_data.z = max_depth;
-	pthread_t thread_bleep;
+	bleep_data.x_norm = 0;
+	bleep_data.y_norm = 0;
+	bleep_data.z_norm = max_depth;
+	ao_initialize();
+        memset(&bleep_data.audio_format, 0, sizeof(ao_sample_format));
+	bleep_data.audio_format.bits = 16;
+	bleep_data.audio_format.channels = 2;
+	bleep_data.audio_format.rate = 44100;
+	bleep_data.audio_format.byte_format = AO_FMT_LITTLE;
+	bleep_data.audio_device = ao_open_live(ao_default_driver_id(),
+						&bleep_data.audio_format, NULL);
+	if (!bleep_data.audio_device) {
+		fprintf(stderr, "error: cannot start open audio device.\n");
+		goto shutdown;
+	}
 	pthread_create(&thread_bleep, NULL, &bleep_thread, &bleep_data);
 
 #ifdef GTK
@@ -319,6 +331,9 @@ int main (int argc, char **argv) {
 	fprintf(stderr, "shutting down...\n");
 
 shutdown:
+
+	/* Shutdown audio resources. */
+	ao_shutdown();
 
 	/* Shutdown kinetic device. */
 	if (freenect_stop_depth(dev)) {
@@ -394,7 +409,8 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 		/* Replicate the current grid cell to the depth matrix. */
 		for (is = 0; is < grid_size; is++)
 		for (js = 0; js < grid_size; js++)
-			z[BUFPOS(i * grid_size + is, j * grid_size + js)] = z_smooth;
+			z[BUFPOS(i * grid_size + is, j * grid_size + js)] =
+									z_smooth;
 
 #undef DISPARITY
 #undef BUFPOS
@@ -403,9 +419,11 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 	if (pthread_mutex_trylock(&bleep_data.lock)) {
 
-		bleep_data.x = normalize(nearest_i, 0, KINETIC_DEPTH_FRAME_WIDTH / grid_size);
-		bleep_data.y = normalize(nearest_j, 0, KINETIC_DEPTH_FRAME_HEIGHT / grid_size);
-		bleep_data.z = normalize(nearest_z, MIN_DEPTH, max_depth);
+		bleep_data.x_norm = normalize(nearest_i, 0,
+					KINETIC_DEPTH_FRAME_WIDTH / grid_size);
+		bleep_data.y_norm = normalize(nearest_j, 0,
+					KINETIC_DEPTH_FRAME_HEIGHT / grid_size);
+		bleep_data.z_norm = normalize(nearest_z, MIN_DEPTH, max_depth);
 		pthread_mutex_unlock(&bleep_data.lock);
 
 	}

@@ -14,6 +14,7 @@ AC_CHECK_PROG([has_pkg_config], [pkg-config], [yes], [no])
 
 # Checks for libraries.
 AC_CHECK_LIB([freenect], [freenect_init], [], [AC_MSG_ERROR([this tool requires libfreenect.])])
+AC_CHECK_LIB([ao], [ao_initialize], [], [AC_MSG_ERROR([this tool requires libao.])])
 AC_CHECK_LIB([gtk-3], [gtk_widget_new], [has_gtk=yes], [has_gtk=no])
 
 # Checks for header files.

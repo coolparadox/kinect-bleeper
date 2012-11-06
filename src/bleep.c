@@ -14,43 +14,70 @@
 #include <time.h>
 #include <stdio.h>
 #include <math.h>
-#include <stdlib.h>
+#include <ao/ao.h>
 
 #include "common.h"
 #include "bleep.h"
 
+#define SLEEP_MIN 0.2
+#define SLEEP_MAX 2
+#define BLEEP_SECOND_FRACTION 10
+
+#define FREQ_MIN 400
+#define FREQ_MAX 4000
+
 #define bleep_data ((struct bleep_data *) thread_data)
 #define lock(x) pthread_mutex_lock(&x->lock)
 #define unlock(x) pthread_mutex_unlock(&x->lock)
+#define audio_format (bleep_data->audio_format)
 
 void *bleep_thread(void *thread_data) {
 
 	double x, y, z;
-	char play_command[256];
+	size_t i;
+	unsigned int sleep_min_usec, sleep_max_usec;
+	char *audio_buf;
+	size_t audio_bufsize;
 
+	sleep_min_usec = lrint((double) SLEEP_MIN * 1000000);
+	sleep_max_usec = lrint((double) SLEEP_MAX * 1000000);
+	audio_bufsize = audio_format.bits/8 * audio_format.channels *
+				audio_format.rate / BLEEP_SECOND_FRACTION;
+	audio_buf = calloc(audio_bufsize, sizeof(char));
 	while (1) {
 
-		/* Gather information on depth position to be broadcasted.
-		 * x, y, z are assumed to be normalized. */
-		lock(bleep_data);
-		x = bleep_data->x;
-		y = bleep_data->y;
-		z = bleep_data->z;
-		unlock(bleep_data);
-
 		/* Sleep for some time according to the target proximity. */
-		usleep(lrint(interpolate(z, 200000, 2000000)));
+		lock(bleep_data);
+		z = bleep_data->z_norm;
+		unlock(bleep_data);
+		usleep(lrint(interpolate(z, sleep_min_usec, sleep_max_usec)));
 
-		/* Notify stdout to bleep once. */
-		double freq = interpolate(y, 400, 4000);
-		//printf("%.0f %.2f %.2f\n",
-		sprintf(play_command, "play -q -n synth 0.1 sine %.0f sine %.0f "
-			"mixer %.2f,0,0,%.2f\n", freq, freq, (double) 1 - x, x);
-		system(play_command);
+		/* Time to bleep once. */
+		lock(bleep_data);
+		x = bleep_data->x_norm;
+		y = bleep_data->y_norm;
+		unlock(bleep_data);
+		for (i = 0; i < audio_format.rate / BLEEP_SECOND_FRACTION; i++) {
+
+			/* Synthesize a tone with frequency as a function of the
+			 * vertical target's coordinate. */
+			double freq = interpolate(y, FREQ_MIN, FREQ_MAX);
+			int sample = lrint((double) 0.75 * 32768.0 * sin(2 *
+				M_PI * freq * ((double) i / audio_format.rate)));
+
+			/* Add the same sound to the left and right channels,
+			 * balancing according to the horizontal target's coordinate. */
+			int left = lrint((double) sample * ((double) 1 - x));
+			int right = lrint((double) sample * x);
+			audio_buf[4*i] = left & 0xff;
+			audio_buf[4*i+1] = (left >> 8) & 0xff;
+			audio_buf[4*i+2] = right & 0xff;
+			audio_buf[4*i+3] = (right >> 8) & 0xff;
+
+		}
+		ao_play(bleep_data->audio_device, audio_buf, audio_bufsize);
 
 	}
-
-	return;
 
 }
 
