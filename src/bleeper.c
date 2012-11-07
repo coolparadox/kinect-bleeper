@@ -45,10 +45,10 @@
 #define SMOOTH_DEFAULT 5
 
 /* Size of pixelization grid. */
-#define MIN_GRID_SIZE 1
-#define MAX_GRID_SIZE 120
+#define MIN_CELL_SIZE 1
+#define MAX_CELL_SIZE 120
 
-#define GRID_SIZE_DEFAULT 8
+#define CELL_SIZE_DEFAULT 8
 
 #define STR(X) #X
 #define XSTR(X) STR(X)
@@ -85,8 +85,8 @@ static struct argp_option options[] = {
 						XSTR(MAX_DEPTH_DEFAULT) "]." },
 	{ "smooth", 's', "SAMPLES", 0, "Number of samples for exponential "
 		"moving average noise reduction [" XSTR(SMOOTH_DEFAULT) "]." },
-	{ "grid", 'g', "GRID_SIZE", 0, "Size of pixelization grid ["
-						XSTR(GRID_SIZE_DEFAULT) "]." },
+	{ "cell", 'c', "CELL_SIZE", 0, "Cell size of pixelization grid ["
+						XSTR(CELL_SIZE_DEFAULT) "]." },
 	{ "mirror", 'm', 0, 0, "Mirror x axis." },
 #ifdef GTK
 	{ "monitor", 'w', 0, 0, "Start the monitor GUI." },
@@ -100,7 +100,7 @@ struct arguments {
 	int fps;
 	char *max_depth;
 	char *smooth;
-	char *grid_size;
+	char *cell_size;
 	int mirror;
 
 #ifdef GTK
@@ -123,8 +123,8 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
 		case 's':
 			arguments->smooth = arg;
 			break;
-		case 'g':
-			arguments->grid_size = arg;
+		case 'c':
+			arguments->cell_size = arg;
 			break;
 		case 'm':
 			arguments->mirror = 1;
@@ -165,9 +165,9 @@ int fps;
 int mirror;
 int monitor;
 double max_depth;
-unsigned long int smooth;
+unsigned int smooth;
 double smooth_factor;
-size_t grid_size;
+size_t cell_size;
 double z[KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT];
 
 int main (int argc, char **argv) {
@@ -233,32 +233,32 @@ int main (int argc, char **argv) {
 	}
 	else
 		smooth = SMOOTH_DEFAULT;
-	fprintf(stderr, "samples for smoothing: %lu\n", smooth);
+	fprintf(stderr, "samples for smoothing: %u\n", smooth);
 	smooth_factor = (double) 2.0 / ((double) smooth + 1);
-	if (arguments.grid_size) {
+	if (arguments.cell_size) {
 
 		char *tail;
-		grid_size = strtoul(arguments.grid_size, &tail, 10);
+		cell_size = strtoul(arguments.cell_size, &tail, 10);
 		if (*tail) {
 			fprintf(stderr, "error: cannot understand '%s' as an "
-				"integer decimal number.\n", arguments.grid_size);
+				"integer decimal number.\n", arguments.cell_size);
 			return(1);
 		}
-		if (grid_size < MIN_GRID_SIZE) {
-			fprintf(stderr, "error: GRID_SIZE must be no lesser than "
-						"%s.\n", XSTR(MIN_GRID_SIZE));
+		if (cell_size < MIN_CELL_SIZE) {
+			fprintf(stderr, "error: CELL_SIZE must be no lesser than "
+						"%s.\n", XSTR(MIN_CELL_SIZE));
 			return(1);
 		}
-		if (grid_size > MAX_GRID_SIZE) {
-			fprintf(stderr, "error: GRID_SIZE must be no greater than "
-						"%s.\n", XSTR(MAX_GRID_SIZE));
+		if (cell_size > MAX_CELL_SIZE) {
+			fprintf(stderr, "error: CELL_SIZE must be no greater than "
+						"%s.\n", XSTR(MAX_CELL_SIZE));
 			return(1);
 		}
 
 	}
 	else
-		grid_size = GRID_SIZE_DEFAULT;
-	fprintf(stderr, "pixelization grid size: %lu\n", grid_size);
+		cell_size = CELL_SIZE_DEFAULT;
+	fprintf(stderr, "pixelization grid size: %lu\n", cell_size);
 
 	/* Cleanup on interruption. */
 	signal(SIGINT, signal_cleanup);
@@ -328,6 +328,8 @@ int main (int argc, char **argv) {
 		monitor_data.nearest_depth = max_depth;
 		memset(monitor_data.depth, 0, DEPTH_MATRIX_SIZE);
 		monitor_data.depth_widget = NULL;
+		monitor_data.smooth = smooth;
+		monitor_data.cell_size = cell_size;
 		pthread_create(&thread_monitor, NULL, &monitor_thread, &monitor_data);
 		fprintf(stderr, "gui monitor started.\n");
 
@@ -366,11 +368,11 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 	double nearest_z;
 
 	/* Travel through the pixelated grid. */
-	nearest_i = KINETIC_DEPTH_FRAME_WIDTH / grid_size / 2;
-	nearest_j = KINETIC_DEPTH_FRAME_HEIGHT / grid_size / 2;
+	nearest_i = KINETIC_DEPTH_FRAME_WIDTH / cell_size / 2;
+	nearest_j = KINETIC_DEPTH_FRAME_HEIGHT / cell_size / 2;
 	nearest_z = max_depth;
-	for (j = 0; j < KINETIC_DEPTH_FRAME_HEIGHT / grid_size; j++)
-	for (i = 0; i < KINETIC_DEPTH_FRAME_WIDTH / grid_size; i++) {
+	for (j = 0; j < KINETIC_DEPTH_FRAME_HEIGHT / cell_size; j++)
+	for (i = 0; i < KINETIC_DEPTH_FRAME_WIDTH / cell_size; i++) {
 
 		size_t is, js;
 		double z_new;
@@ -378,8 +380,8 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 		double z_smooth;
 
 		/* Account the depth value for the current grid cell. */
-		for (js = 0; js < grid_size; js++)
-		for (is = 0; is < grid_size; is++) {
+		for (js = 0; js < cell_size; js++)
+		for (is = 0; is < cell_size; is++) {
 
 			/* Convert raw disparity values to real world distance
 			 * information.  See
@@ -389,19 +391,19 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 #define BUFPOS(x,y) ((y) * KINETIC_DEPTH_FRAME_WIDTH + (x))
 #define DISPARITY(x,y) ((uint16_t *) depth)[BUFPOS(MIRROR(x),y)]
 
-			z_new = tan(DISPARITY(i * grid_size + is, j * grid_size + js)
+			z_new = tan(DISPARITY(i * cell_size + is, j * cell_size + js)
 					/ 2842.5 + 1.1863) * 0.1236 - 0.037;
 			if (z_new > max_depth) z_new = max_depth;
 			if (z_new < MIN_DEPTH) z_new = max_depth;
 			z_grid += z_new;
 
 		}
-		z_grid /= pow(grid_size, 2);
+		z_grid /= pow(cell_size, 2);
 		if (z_grid > max_depth) z_grid = max_depth;
 
 		/* Smooth the value of the current grid cell. */
 		if (z_grid >= MIN_DEPTH) {
-			double z_old = z[BUFPOS(i * grid_size, j * grid_size)];
+			double z_old = z[BUFPOS(i * cell_size, j * cell_size)];
 			z_smooth = smooth_factor * z_grid +
 						(1 - smooth_factor) * z_old;
 			}
@@ -418,9 +420,9 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 		}
 
 		/* Replicate the current grid cell to the depth matrix. */
-		for (is = 0; is < grid_size; is++)
-		for (js = 0; js < grid_size; js++)
-			z[BUFPOS(i * grid_size + is, j * grid_size + js)] =
+		for (is = 0; is < cell_size; is++)
+		for (js = 0; js < cell_size; js++)
+			z[BUFPOS(i * cell_size + is, j * cell_size + js)] =
 									z_smooth;
 
 #undef DISPARITY
@@ -432,9 +434,9 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 	if (pthread_mutex_trylock(&bleep_data.lock)) {
 
 		bleep_data.x_norm = normalize(nearest_i, 0,
-					KINETIC_DEPTH_FRAME_WIDTH / grid_size);
+					KINETIC_DEPTH_FRAME_WIDTH / cell_size);
 		bleep_data.y_norm = normalize(nearest_j, 0,
-					KINETIC_DEPTH_FRAME_HEIGHT / grid_size);
+					KINETIC_DEPTH_FRAME_HEIGHT / cell_size);
 		bleep_data.z_norm = normalize(nearest_z, MIN_DEPTH, max_depth);
 		pthread_mutex_unlock(&bleep_data.lock);
 
@@ -447,10 +449,10 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 		/* Notify GUI monitor about depth information update. */
 		if (pthread_mutex_trylock(&monitor_data.lock)) {
 			memcpy(monitor_data.depth, z, DEPTH_MATRIX_SIZE);
-			monitor_data.nearest_coord[0] = nearest_i * grid_size
-							+ (grid_size / 2);
-			monitor_data.nearest_coord[1] = nearest_j * grid_size
-							+ (grid_size / 2);
+			monitor_data.nearest_coord[0] = nearest_i * cell_size
+							+ (cell_size / 2);
+			monitor_data.nearest_coord[1] = nearest_j * cell_size
+							+ (cell_size / 2);
 			monitor_data.nearest_depth = nearest_z;
 			pthread_mutex_unlock(&monitor_data.lock);
 			if (monitor_data.depth_widget)

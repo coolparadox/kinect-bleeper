@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "common.h"
 #include "monitor.h"
@@ -26,7 +27,12 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data);
 #define lock(data) pthread_mutex_lock(&data->lock)
 #define unlock(data) pthread_mutex_unlock(&data->lock)
 
+#define STRSIZE 1024
+#define PADDING 5
+
 void *monitor_thread(void *monitor_data) {
+
+	char str[STRSIZE];
 
 	lock(data);
 
@@ -38,18 +44,55 @@ void *monitor_thread(void *monitor_data) {
 
 	/* Initialize monitor window. */
 	GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	gtk_window_set_title(GTK_WINDOW(window), "Kinect Bleeper Monitor");
 	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-	GtkWidget *depth_widget = gtk_drawing_area_new();
-	data->depth_widget = depth_widget;
-	gtk_widget_set_size_request(depth_widget, data->freenect_frame_width,
+	GtkWidget *top_box;
+	top_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+	gtk_container_add(GTK_CONTAINER(window), top_box);
+	GtkWidget *box;
+	box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	gtk_box_pack_start(GTK_BOX(top_box), box, TRUE, TRUE, PADDING);
+	GtkWidget *wd;
+	wd = gtk_drawing_area_new();
+	data->depth_widget = wd;
+	gtk_widget_set_size_request(wd, data->freenect_frame_width,
 						data->freenect_frame_height);
-	gtk_container_add(GTK_CONTAINER(window), depth_widget);
-	g_signal_connect(G_OBJECT(depth_widget), "draw",
+	g_signal_connect(G_OBJECT(wd), "draw",
 				G_CALLBACK(depth_draw), monitor_data);
-	gtk_widget_show(depth_widget);
-	gtk_widget_show(window);
+	gtk_box_pack_start(GTK_BOX(box), wd, FALSE, FALSE, PADDING);
+	GtkTextBuffer *textbuf = gtk_text_buffer_new(NULL);
+	snprintf(str, STRSIZE, " * OPERATING PARAMETERS *\n\n");
+	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
+	snprintf(str, STRSIZE, "min depth: %.2f meters\n", data->min_depth);
+	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
+	snprintf(str, STRSIZE, "max depth: %.2f meters\n", data->max_depth);
+	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
+	snprintf(str, STRSIZE, "grid size: %lu x %lu pixels\n",
+				data->freenect_frame_width / data->cell_size,
+				data->freenect_frame_height / data->cell_size);
+	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
+	snprintf(str, STRSIZE, "smoothness: %u samples\n", data->smooth);
+	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
+	snprintf(str, STRSIZE, "\n\n==========\n\n");
+	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
+	snprintf(str, STRSIZE, "kinect-bleeper project\n");
+	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
+	snprintf(str, STRSIZE, "http://coolparadox.github.com\n");
+	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
+	wd = gtk_text_view_new_with_buffer(textbuf);
+	gtk_widget_set_size_request(wd, 250, data->freenect_frame_height);
+	gtk_text_view_set_editable((GtkTextView *) wd, FALSE);
+	gtk_text_view_set_cursor_visible((GtkTextView *) wd, FALSE);
+	gtk_text_view_set_left_margin((GtkTextView *) wd, 5);
+	gtk_box_pack_start(GTK_BOX(box), wd, TRUE, TRUE, 0);
+	box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	gtk_box_pack_start(GTK_BOX(top_box), box, TRUE, TRUE, PADDING);
+	wd = gtk_button_new_with_label("Quit");
+	g_signal_connect(G_OBJECT(wd), "clicked", G_CALLBACK(gtk_main_quit), NULL);
+	gtk_box_pack_start(GTK_BOX(box), wd, TRUE, TRUE, PADDING);
+	gtk_widget_show_all(window);
 
-	/* Await for events. */
+	/* Wait for events. */
 	unlock(data);
 	gtk_main();
 
@@ -61,6 +104,9 @@ void *monitor_thread(void *monitor_data) {
 	return 0;
 
 }
+
+#undef PADDING
+#undef STRSIZE
 
 struct rgb {
 
