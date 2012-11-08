@@ -181,13 +181,6 @@ int main (int argc, char **argv) {
 	pthread_t thread_monitor;
 #endif // GTK
 
-	/* Hello world. */
-	fprintf(stderr, "==========\n");
-	fprintf(stderr, "%s project\n", PACKAGE_NAME);
-	fprintf(stderr, "version %s\n", PACKAGE_VERSION);
-	fprintf(stderr, "http://coolparadox.github.com\n");
-	fprintf(stderr, "==========\n");
-
 	/* Parse CLI arguments. */
 	memset(&arguments, 0, sizeof(struct arguments));
         argp_parse (&argp, argc, argv, 0, 0, &arguments);
@@ -216,7 +209,6 @@ int main (int argc, char **argv) {
 	}
 	else
 		max_depth = MAX_DEPTH_DEFAULT;
-	fprintf(stderr, "dynamic range: %.2lf - %.2lf meters\n", MIN_DEPTH, max_depth);
 	if (arguments.smooth) {
 
 		char *tail;
@@ -240,7 +232,6 @@ int main (int argc, char **argv) {
 	}
 	else
 		smooth = SMOOTH_DEFAULT;
-	fprintf(stderr, "samples for smoothing: %u\n", smooth);
 	smooth_factor = (double) 2.0 / ((double) smooth + 1);
 	if (arguments.cell_size) {
 
@@ -265,9 +256,19 @@ int main (int argc, char **argv) {
 	}
 	else
 		cell_size = CELL_SIZE_DEFAULT;
+
+	/* Hello world. */
+	fprintf(stderr, "==========\n");
+	fprintf(stderr, "%s\n", PACKAGE_STRING);
+	fprintf(stderr, "\n");
+	fprintf(stderr, "%s project\n", PACKAGE_NAME);
+	fprintf(stderr, "%s\n", PACKAGE_URL);
+	fprintf(stderr, "==========\n");
+	fprintf(stderr, "dynamic range: %.2lf - %.2lf meters\n", MIN_DEPTH, max_depth);
 	fprintf(stderr, "cell size: %lu (%lux%lu grid)\n", cell_size,
 				KINECT_DEPTH_FRAME_WIDTH / cell_size,
 				KINECT_DEPTH_FRAME_HEIGHT / cell_size);
+	fprintf(stderr, "samples for smoothing: %u\n", smooth);
 
 	/* Cleanup on interruption. */
 	signal(SIGINT, signal_cleanup);
@@ -282,7 +283,6 @@ int main (int argc, char **argv) {
 		fprintf(stderr, "error: cannot open kinect device.\n");
 		return (1);
 	}
-	fprintf(stderr, "kinect device found.\n");
 	if (freenect_set_depth_mode(dev, freenect_find_depth_mode(
 			FREENECT_RESOLUTION_MEDIUM, FREENECT_DEPTH_11BIT))) {
 		fprintf(stderr, "error: cannot set depth mode.\n");
@@ -295,7 +295,7 @@ int main (int argc, char **argv) {
 		fprintf(stderr, "error: cannot start depth stream.\n");
 		goto shutdown;
 	}
-	fprintf(stderr, "depth stream initialized\n");
+	fprintf(stderr, "kinect device initialized.\n");
 
 	/* Initialize audio thread. */
 	pthread_mutex_init(&bleep_data.lock, NULL);
@@ -315,15 +315,13 @@ int main (int argc, char **argv) {
 		goto shutdown;
 	}
 	pthread_create(&thread_bleep, NULL, &bleep_thread, &bleep_data);
-	fprintf(stderr, "audio device opened.\n");
+	fprintf(stderr, "audio device initialized.\n");
 
 #ifdef GTK
 
 	/* Initialize GUI monitor. */
 	gdk_threads_init();
-	gdk_threads_enter();
 	gtk_init (&argc, &argv);
-	gdk_threads_leave();
 	monitor = arguments.monitor;
 	if (monitor) {
 
@@ -352,7 +350,7 @@ int main (int argc, char **argv) {
 #endif // GTK
 
 	/* Process frame events. */
-	fprintf(stderr, "processing stream...\n");
+	fprintf(stderr, "processing depth stream...\n");
 	while (running && freenect_process_events(ctx) >= 0);
 	fprintf(stderr, "shutting down...\n");
 

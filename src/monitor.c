@@ -34,8 +34,9 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data);
 
 void *monitor_thread(void *monitor_data) {
 
-	char str[STRSIZE];
+	char *str;
 
+	str = malloc(sizeof(char) * STRSIZE);
 	lock(data);
 
 	/* Initialize surface buffer. */
@@ -64,7 +65,7 @@ void *monitor_thread(void *monitor_data) {
 				G_CALLBACK(depth_draw), monitor_data);
 	gtk_box_pack_start(GTK_BOX(box), wd, FALSE, FALSE, PADDING);
 	GtkTextBuffer *textbuf = gtk_text_buffer_new(NULL);
-	snprintf(str, STRSIZE, " * OPERATING PARAMETERS *\n\n");
+	snprintf(str, STRSIZE, "OPERATING PARAMETERS\n\n");
 	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
 	snprintf(str, STRSIZE, "min depth: %.2f meters\n", data->min_depth);
 	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
@@ -78,11 +79,11 @@ void *monitor_thread(void *monitor_data) {
 	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
 	snprintf(str, STRSIZE, "\n==========\n\n");
 	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
+	snprintf(str, STRSIZE, "%s\n\n", PACKAGE_STRING);
+	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
 	snprintf(str, STRSIZE, "%s project\n", PACKAGE_NAME);
 	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
-	snprintf(str, STRSIZE, "version %s\n", PACKAGE_VERSION);
-	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
-	snprintf(str, STRSIZE, "http://coolparadox.github.com\n");
+	snprintf(str, STRSIZE, "%s\n", PACKAGE_URL);
 	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
 	wd = gtk_text_view_new_with_buffer(textbuf);
 	gtk_widget_set_size_request(wd, 250, data->freenect_frame_height);
@@ -100,6 +101,7 @@ void *monitor_thread(void *monitor_data) {
 
 	/* Wait for events. */
 	unlock(data);
+	free(str);
 	gdk_threads_enter();
 	gtk_main();
 	gdk_threads_leave();
