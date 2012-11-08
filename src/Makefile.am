@@ -9,5 +9,7 @@ endif
 kinect_bleeper_CFLAGS = -pthread @GTK_CFLAGS@
 kinect_bleeper_LDFLAGS = -pthread -lm @GTK_LDFLAGS@
 
+EXTRA_DIST = *.h
+
 MAINTAINERCLEANFILES = Makefile.in
 
