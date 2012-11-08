@@ -26,11 +26,11 @@
 #include "common.h"
 #include "bleep.h"
 
-#define KINETIC_DEPTH_FRAME_WIDTH 640
-#define KINETIC_DEPTH_FRAME_HEIGHT 480
-#define KINETIC_DEPTH_BITS_PER_DEPTH 11
+#define KINECT_DEPTH_FRAME_WIDTH 640
+#define KINECT_DEPTH_FRAME_HEIGHT 480
+#define KINECT_DEPTH_BITS_PER_DEPTH 11
 
-#define DEPTH_MATRIX_SIZE (KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT)
+#define DEPTH_MATRIX_SIZE (KINECT_DEPTH_FRAME_WIDTH * KINECT_DEPTH_FRAME_HEIGHT)
 
 /* Dynamic operation range in meters. */
 #define MIN_DEPTH 0.45
@@ -168,7 +168,7 @@ double max_depth;
 unsigned int smooth;
 double smooth_factor;
 size_t cell_size;
-double z[KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT];
+double z[KINECT_DEPTH_FRAME_WIDTH * KINECT_DEPTH_FRAME_HEIGHT];
 
 int main (int argc, char **argv) {
 
@@ -180,6 +180,13 @@ int main (int argc, char **argv) {
 #ifdef GTK
 	pthread_t thread_monitor;
 #endif // GTK
+
+	/* Hello world. */
+	fprintf(stderr, "==========\n");
+	fprintf(stderr, "%s project\n", PACKAGE_NAME);
+	fprintf(stderr, "version %s\n", PACKAGE_VERSION);
+	fprintf(stderr, "http://coolparadox.github.com\n");
+	fprintf(stderr, "==========\n");
 
 	/* Parse CLI arguments. */
 	memset(&arguments, 0, sizeof(struct arguments));
@@ -258,12 +265,14 @@ int main (int argc, char **argv) {
 	}
 	else
 		cell_size = CELL_SIZE_DEFAULT;
-	fprintf(stderr, "pixelization grid size: %lu\n", cell_size);
+	fprintf(stderr, "cell size: %lu (%lux%lu grid)\n", cell_size,
+				KINECT_DEPTH_FRAME_WIDTH / cell_size,
+				KINECT_DEPTH_FRAME_HEIGHT / cell_size);
 
 	/* Cleanup on interruption. */
 	signal(SIGINT, signal_cleanup);
 
-	/* Initialize kinetic device. */
+	/* Initialize kinect device. */
 	if (freenect_init(&ctx, NULL)) {
 		fprintf(stderr, "error: cannot initialize freenect context.\n");
 		return (1);
@@ -273,14 +282,14 @@ int main (int argc, char **argv) {
 		fprintf(stderr, "error: cannot open kinect device.\n");
 		return (1);
 	}
-	fprintf(stderr, "kinetic device found.\n");
+	fprintf(stderr, "kinect device found.\n");
 	if (freenect_set_depth_mode(dev, freenect_find_depth_mode(
 			FREENECT_RESOLUTION_MEDIUM, FREENECT_DEPTH_11BIT))) {
 		fprintf(stderr, "error: cannot set depth mode.\n");
 		goto shutdown;
 	}
-	memset(z, 0, sizeof(double) * KINETIC_DEPTH_FRAME_WIDTH *
-						KINETIC_DEPTH_FRAME_HEIGHT);
+	memset(z, 0, sizeof(double) * KINECT_DEPTH_FRAME_WIDTH *
+						KINECT_DEPTH_FRAME_HEIGHT);
 	freenect_set_depth_callback(dev, process_depth);
 	if (freenect_start_depth(dev)) {
 		fprintf(stderr, "error: cannot start depth stream.\n");
@@ -306,6 +315,7 @@ int main (int argc, char **argv) {
 		goto shutdown;
 	}
 	pthread_create(&thread_bleep, NULL, &bleep_thread, &bleep_data);
+	fprintf(stderr, "audio device opened.\n");
 
 #ifdef GTK
 
@@ -323,9 +333,9 @@ int main (int argc, char **argv) {
 		monitor_data.depth = malloc(sizeof(double) * DEPTH_MATRIX_SIZE);
 		for (i = 0; i < DEPTH_MATRIX_SIZE; i++)
 			monitor_data.depth[i] = max_depth;
-		monitor_data.freenect_frame_width = KINETIC_DEPTH_FRAME_WIDTH;
-		monitor_data.freenect_frame_height = KINETIC_DEPTH_FRAME_HEIGHT;
-		monitor_data.freenect_bits_per_depth = KINETIC_DEPTH_BITS_PER_DEPTH;
+		monitor_data.freenect_frame_width = KINECT_DEPTH_FRAME_WIDTH;
+		monitor_data.freenect_frame_height = KINECT_DEPTH_FRAME_HEIGHT;
+		monitor_data.freenect_bits_per_depth = KINECT_DEPTH_BITS_PER_DEPTH;
 		monitor_data.min_depth = MIN_DEPTH;
 		monitor_data.max_depth = max_depth;
 		monitor_data.nearest_coord[0] = 0;
@@ -351,7 +361,7 @@ shutdown:
 	/* Shutdown audio resources. */
 	ao_shutdown();
 
-	/* Shutdown kinetic device. */
+	/* Shutdown kinect device. */
 	if (freenect_stop_depth(dev)) {
 		fprintf(stderr, "warning: cannot stop depth stream.\n");
 	}
@@ -372,11 +382,11 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 	double nearest_z;
 
 	/* Travel through the pixelated grid. */
-	nearest_i = KINETIC_DEPTH_FRAME_WIDTH / cell_size / 2;
-	nearest_j = KINETIC_DEPTH_FRAME_HEIGHT / cell_size / 2;
+	nearest_i = KINECT_DEPTH_FRAME_WIDTH / cell_size / 2;
+	nearest_j = KINECT_DEPTH_FRAME_HEIGHT / cell_size / 2;
 	nearest_z = max_depth;
-	for (j = 0; j < KINETIC_DEPTH_FRAME_HEIGHT / cell_size; j++)
-	for (i = 0; i < KINETIC_DEPTH_FRAME_WIDTH / cell_size; i++) {
+	for (j = 0; j < KINECT_DEPTH_FRAME_HEIGHT / cell_size; j++)
+	for (i = 0; i < KINECT_DEPTH_FRAME_WIDTH / cell_size; i++) {
 
 		size_t is, js;
 		double z_new;
@@ -391,8 +401,8 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 			 * information.  See
 			 * http://openkinect.org/wiki/Imaging_Information#Depth_Camera */
 
-#define MIRROR(x) (mirror ? (KINETIC_DEPTH_FRAME_WIDTH - (x) - 1) : x)
-#define BUFPOS(x,y) ((y) * KINETIC_DEPTH_FRAME_WIDTH + (x))
+#define MIRROR(x) (mirror ? (KINECT_DEPTH_FRAME_WIDTH - (x) - 1) : x)
+#define BUFPOS(x,y) ((y) * KINECT_DEPTH_FRAME_WIDTH + (x))
 #define DISPARITY(x,y) ((uint16_t *) depth)[BUFPOS(MIRROR(x),y)]
 
 			z_new = tan(DISPARITY(i * cell_size + is, j * cell_size + js)
@@ -438,9 +448,9 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 	if (pthread_mutex_trylock(&bleep_data.lock)) {
 
 		bleep_data.x_norm = normalize(nearest_i, 0,
-					KINETIC_DEPTH_FRAME_WIDTH / cell_size);
+					KINECT_DEPTH_FRAME_WIDTH / cell_size);
 		bleep_data.y_norm = normalize(nearest_j, 0,
-					KINETIC_DEPTH_FRAME_HEIGHT / cell_size);
+					KINECT_DEPTH_FRAME_HEIGHT / cell_size);
 		bleep_data.z_norm = normalize(nearest_z, MIN_DEPTH, max_depth);
 		pthread_mutex_unlock(&bleep_data.lock);
 

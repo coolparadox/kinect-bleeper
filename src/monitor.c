@@ -10,6 +10,8 @@
  *
  */
 
+#include <config.h>
+
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
@@ -74,9 +76,11 @@ void *monitor_thread(void *monitor_data) {
 	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
 	snprintf(str, STRSIZE, "smoothness: %u samples\n", data->smooth);
 	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
-	snprintf(str, STRSIZE, "\n\n==========\n\n");
+	snprintf(str, STRSIZE, "\n==========\n\n");
 	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
-	snprintf(str, STRSIZE, "kinect-bleeper project\n");
+	snprintf(str, STRSIZE, "%s project\n", PACKAGE_NAME);
+	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
+	snprintf(str, STRSIZE, "version %s\n", PACKAGE_VERSION);
 	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);
 	snprintf(str, STRSIZE, "http://coolparadox.github.com\n");
 	gtk_text_buffer_insert_at_cursor(textbuf, str, -1);

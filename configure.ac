@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.68])
-AC_INIT([kinect-bleeper], [0.0], [http://github.com/coolparadox/kinect-bleeper/issues], [], [http://coolparadox.github.com/kinect-bleeper])
+AC_INIT([kinect-bleeper], [1.0], [http://github.com/coolparadox/kinect-bleeper/issues], [], [http://github.com/coolparadox/kinect-bleeper])
 AM_INIT_AUTOMAKE([gnu])
 AC_CONFIG_SRCDIR([src/bleeper.c])
 AC_CONFIG_HEADERS([config.h])
