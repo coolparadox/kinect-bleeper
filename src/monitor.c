@@ -43,6 +43,7 @@ void *monitor_thread(void *monitor_data) {
 	memset(surface_buffer, 0, stride * data->freenect_frame_height);
 
 	/* Initialize monitor window. */
+	gdk_threads_enter();
 	GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_title(GTK_WINDOW(window), "Kinect Bleeper Monitor");
 	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
@@ -91,10 +92,13 @@ void *monitor_thread(void *monitor_data) {
 	g_signal_connect(G_OBJECT(wd), "clicked", G_CALLBACK(gtk_main_quit), NULL);
 	gtk_box_pack_start(GTK_BOX(box), wd, TRUE, TRUE, PADDING);
 	gtk_widget_show_all(window);
+	gdk_threads_leave();
 
 	/* Wait for events. */
 	unlock(data);
+	gdk_threads_enter();
 	gtk_main();
+	gdk_threads_leave();
 
 	/* Signal main thread for termination. */
 	lock(data);
@@ -121,31 +125,41 @@ void color_for_depth(struct rgb *rgb, double depth, double min_depth, double max
 void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 
 	size_t i, j, k;
+	double *depth;
+
+	lock(data);
+	size_t frame_height = data->freenect_frame_height;
+	size_t frame_width = data->freenect_frame_width;
+	double min_depth = data->min_depth;
+	double max_depth = data->max_depth;
+	size_t nearest_i = data->nearest_coord[0];
+	size_t nearest_j = data->nearest_coord[1];
+	double nearest_depth = data->nearest_depth;
+#define DEPTH_SIZE (sizeof(double) * frame_height * frame_width)
+	depth = malloc(DEPTH_SIZE);
+	memcpy(depth, data->depth, DEPTH_SIZE);
+#undef DEPTH_SIZE
+	unlock(data);
 
 	/* Update the Cairo surface representing the depth information. */
-	lock(data);
-	for (j = 0; j < data->freenect_frame_height ; j++) {
+	for (j = 0; j < frame_height ; j++) {
 
 		k = j * (stride >> 2); // surface buffer pixel column index;
-		for (i = 0; i < data->freenect_frame_width ; i++) {
+		for (i = 0; i < frame_width ; i++) {
 
 			/* Convert depth value to 8-bit gray level. */
 
-#define depth(i,j) data->depth[(j) * data->freenect_frame_width + (i)]
-#define min data->min_depth
-#define max data->max_depth
-#define A ((double) 0xFF / (max - min))
-#define B ((double) 0xFF * min / (min - max))
-#define gray_depth(i,j) (depth(i,j) * A + B)
+#define DEPTH(i,j) depth[(j) * frame_width + (i)]
+#define A ((double) 0xFF / (max_depth - min_depth))
+#define B ((double) 0xFF * min_depth / (min_depth - max_depth))
+#define gray_depth(i,j) (DEPTH(i,j) * A + B)
 
 			long int gray_level = lrint(gray_depth(i, j));
 
 #undef gray_depth
 #undef B
 #undef A
-#undef max
-#undef min
-#undef depth
+#undef DEPTH
 
 			if (gray_level > 0xFF) {
 				fprintf(stderr, "alert: pixel value overflow!\n");
@@ -160,10 +174,11 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 
 		}
 	}
+	free(depth);
 	cairo_surface_t *new_surface = cairo_image_surface_create_for_data(
 						surface_buffer, CAIRO_FORMAT_RGB24,
-						data->freenect_frame_width,
-						data->freenect_frame_height,
+						frame_width,
+						frame_height,
 						stride);
 
 	/* Paint the new surface data in the wodget. */
@@ -172,13 +187,12 @@ void *depth_draw(GtkWidget *wd, cairo_t *cr, void *monitor_data) {
 
 	/* Mark the nearest position. */
 	struct rgb rgb;
-	color_for_depth(&rgb, data->nearest_depth, data->min_depth, data->max_depth);
+	color_for_depth(&rgb, nearest_depth, min_depth, max_depth);
 	cairo_set_source_rgb(cr, rgb.red, rgb.green, rgb.blue);
 	cairo_set_line_width(cr, 10);
-	cairo_arc(cr, data->nearest_coord[0], data->nearest_coord[1], 10, 0, 2 * M_PI);
+	cairo_arc(cr, nearest_i, nearest_j, 10, 0, 2 * M_PI);
 	cairo_stroke(cr);
 
-	unlock(data);
 	return;
 
 }

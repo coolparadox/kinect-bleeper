@@ -30,7 +30,7 @@
 #define KINETIC_DEPTH_FRAME_HEIGHT 480
 #define KINETIC_DEPTH_BITS_PER_DEPTH 11
 
-#define DEPTH_MATRIX_SIZE (sizeof(double) * KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT)
+#define DEPTH_MATRIX_SIZE (KINETIC_DEPTH_FRAME_WIDTH * KINETIC_DEPTH_FRAME_HEIGHT)
 
 /* Dynamic operation range in meters. */
 #define MIN_DEPTH 0.45
@@ -290,11 +290,11 @@ int main (int argc, char **argv) {
 
 	/* Initialize audio thread. */
 	pthread_mutex_init(&bleep_data.lock, NULL);
-	bleep_data.x_norm = 0;
-	bleep_data.y_norm = 0;
-	bleep_data.z_norm = max_depth;
+	bleep_data.x_norm = 0.5;
+	bleep_data.y_norm = 0.5;
+	bleep_data.z_norm = 1;
 	ao_initialize();
-        memset(&bleep_data.audio_format, 0, sizeof(ao_sample_format));
+	memset(&bleep_data.audio_format, 0, sizeof(ao_sample_format));
 	bleep_data.audio_format.bits = 16;
 	bleep_data.audio_format.channels = 2;
 	bleep_data.audio_format.rate = 44100;
@@ -310,23 +310,27 @@ int main (int argc, char **argv) {
 #ifdef GTK
 
 	/* Initialize GUI monitor. */
+	gdk_threads_init();
+	gdk_threads_enter();
 	gtk_init (&argc, &argv);
+	gdk_threads_leave();
 	monitor = arguments.monitor;
 	if (monitor) {
 
 		/* Start the GUI monitor thread. */
 		pthread_mutex_init(&monitor_data.lock, NULL);
 		monitor_data.running = &running;
+		monitor_data.depth = malloc(sizeof(double) * DEPTH_MATRIX_SIZE);
+		for (i = 0; i < DEPTH_MATRIX_SIZE; i++)
+			monitor_data.depth[i] = max_depth;
 		monitor_data.freenect_frame_width = KINETIC_DEPTH_FRAME_WIDTH;
 		monitor_data.freenect_frame_height = KINETIC_DEPTH_FRAME_HEIGHT;
 		monitor_data.freenect_bits_per_depth = KINETIC_DEPTH_BITS_PER_DEPTH;
-		monitor_data.depth = malloc(DEPTH_MATRIX_SIZE);
 		monitor_data.min_depth = MIN_DEPTH;
 		monitor_data.max_depth = max_depth;
 		monitor_data.nearest_coord[0] = 0;
 		monitor_data.nearest_coord[1] = 0;
 		monitor_data.nearest_depth = max_depth;
-		memset(monitor_data.depth, 0, DEPTH_MATRIX_SIZE);
 		monitor_data.depth_widget = NULL;
 		monitor_data.smooth = smooth;
 		monitor_data.cell_size = cell_size;
@@ -448,15 +452,17 @@ void process_depth(freenect_device *dev, void *depth, uint32_t timestamp) {
 
 		/* Notify GUI monitor about depth information update. */
 		if (pthread_mutex_trylock(&monitor_data.lock)) {
-			memcpy(monitor_data.depth, z, DEPTH_MATRIX_SIZE);
+			memcpy(monitor_data.depth, z, sizeof(double) *
+							DEPTH_MATRIX_SIZE);
 			monitor_data.nearest_coord[0] = nearest_i * cell_size
 							+ (cell_size / 2);
 			monitor_data.nearest_coord[1] = nearest_j * cell_size
 							+ (cell_size / 2);
 			monitor_data.nearest_depth = nearest_z;
 			pthread_mutex_unlock(&monitor_data.lock);
-			if (monitor_data.depth_widget)
-				gtk_widget_queue_draw(monitor_data.depth_widget);
+			gdk_threads_enter();
+			gtk_widget_queue_draw(monitor_data.depth_widget);
+			gdk_threads_leave();
 		}
 
 	}

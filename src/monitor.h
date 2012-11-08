@@ -18,9 +18,9 @@ struct monitor_data {
 	pthread_mutex_t lock;
 	GtkWidget *depth_widget;
 	volatile sig_atomic_t *running;
-	int freenect_frame_width;
-	int freenect_frame_height;
-	int freenect_bits_per_depth;
+	size_t  freenect_frame_width;
+	size_t  freenect_frame_height;
+	size_t  freenect_bits_per_depth;
 	double *depth;
 	double min_depth, max_depth;
 	size_t nearest_coord[2];
