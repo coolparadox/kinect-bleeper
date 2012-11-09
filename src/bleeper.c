@@ -308,12 +308,6 @@ int main (int argc, char **argv) {
 	bleep_data.audio_format.channels = 2;
 	bleep_data.audio_format.rate = 44100;
 	bleep_data.audio_format.byte_format = AO_FMT_LITTLE;
-	bleep_data.audio_device = ao_open_live(ao_default_driver_id(),
-						&bleep_data.audio_format, NULL);
-	if (!bleep_data.audio_device) {
-		fprintf(stderr, "error: cannot start open audio device.\n");
-		goto shutdown;
-	}
 	pthread_create(&thread_bleep, NULL, &bleep_thread, &bleep_data);
 	fprintf(stderr, "audio device initialized.\n");
 

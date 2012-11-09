@@ -14,6 +14,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 #include <ao/ao.h>
 
 #include "common.h"
@@ -38,12 +39,17 @@ void *bleep_thread(void *thread_data) {
 	unsigned int sleep_min_usec, sleep_max_usec;
 	char *audio_buf;
 	size_t audio_bufsize;
+	int audio_driver;
+	ao_sample_format sample_format;
+	ao_device *audio_device;
 
 	sleep_min_usec = lrint((double) SLEEP_MIN * 1000000);
 	sleep_max_usec = lrint((double) SLEEP_MAX * 1000000);
 	audio_bufsize = audio_format.bits/8 * audio_format.channels *
 				audio_format.rate / BLEEP_SECOND_FRACTION;
 	audio_buf = calloc(audio_bufsize, sizeof(char));
+	memcpy(&sample_format, &audio_format, sizeof(ao_sample_format));
+	audio_driver = ao_default_driver_id();
 	while (1) {
 
 		/* Sleep for some time according to the target proximity. */
@@ -75,7 +81,14 @@ void *bleep_thread(void *thread_data) {
 			audio_buf[4*i+3] = (right >> 8) & 0xff;
 
 		}
-		ao_play(bleep_data->audio_device, audio_buf, audio_bufsize);
+		audio_device = ao_open_live(audio_driver, &audio_format, NULL);
+		if (audio_device) {
+			ao_play(audio_device, audio_buf, audio_bufsize);
+			ao_close(audio_device);
+		}
+		else {
+			fprintf(stderr, "error: cannot open audio device.\n");
+		}
 
 	}
 
