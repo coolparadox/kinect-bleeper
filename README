@@ -8,9 +8,9 @@ an assistive technology device for the visually impaired. By parsing Kinect's
 depth information stream, this routine detects the nearest object and then
 express its relative position in the field of view using sounds.
 
-The horizontal position of the nearest object is coded by the left-right audio
-balance of speakers, the vertical position is coded by the tone of bleeps, and
-the distance to the nearest object is coded by the repetition rate of bleeps.
+The horizontal position of the nearest object is encoded by the left-right audio
+balance of speakers, the vertical position is encoded by the tone of bleeps, and
+the distance to the nearest object is encoded by the repetition rate of bleeps.
 
 Tested in indoor environments only. Engineering efforts are required to address
 hardware bulk issues before a setup suited for practical daily usage can be
