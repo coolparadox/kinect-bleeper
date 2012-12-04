@@ -74,7 +74,18 @@ const char *argp_program_version = PACKAGE_VERSION;
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 
 static char doc[] = "kinect_bleeper -- obstacle avoidance using sounds and "
-			"openkinect\vThis routine in not yet implemented.\n";
+	"openkinect\vThis routine is a proof-of-concept on using the Microsoft "
+	"Kinect(tm) sensor as an assistive technology device for the visually "
+	"impaired. By parsing Kinect's depth information stream, this routine "
+	"detects the nearest object and then express its relative position in the "
+	"field of view using sounds.\n"
+	"\nThe horizontal position of the nearest object is coded by the "
+	"left-right audio balance of speakers, the vertical position is coded "
+	"by the tone of bleeps, and the distance to the nearest object is coded "
+	"by the repetition rate of bleeps.\n"
+	"\nTested in indoor environments only. Engineering efforts are required "
+	"to address hardware bulk issues before a setup suited for practical "
+	"daily usage can be achieved.\n";
 
 static char args_doc[] = "";
 
